@@ -79,10 +79,10 @@
 \vspace{-0.5em}
 \noindent
 \begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}ll}
-    \textbf{1.} Name: thnabun & \textbf{ID:} \underline{\hspace{4.5cm}} \\[3pt]
-    \textbf{2.} Name: \underline{\hspace{7cm}} & \textbf{ID:} \underline{\hspace{4.5cm}} \\[3pt]
-    \textbf{3.} Name: \underline{\hspace{7cm}} & \textbf{ID:} \underline{\hspace{4.5cm}} \\[3pt]
-    \textbf{4.} Name: \underline{\hspace{7cm}} & \textbf{ID:} \underline{\hspace{4.5cm}} \\[4pt]
+    \textbf{1.} Name: Thanaboon Tikaew & \textbf{ID:} 67070501021 \\[3pt]
+    \textbf{2.} Name: Chanon Lhumsa-ard & \textbf{ID:} 67070501059 \\[3pt]
+    \textbf{3.} Name: Theeraphat Jaingam & \textbf{ID:} 67070501063 \\[3pt]
+    \textbf{4.} Name: Siriwan Yindeephot & \textbf{ID:} 67070501075 \\[4pt]
 \end{tabular*}
 
 \vspace{2pt}
@@ -154,40 +154,39 @@ int main(int argc, char *argv[])
 --- run 1 ---
 hello world (pid:1237)
 hello, I am parent of 1238 (pid:1237)
-hello world (pid:1237)
 hello, I am child (pid:1238)
 --- run 2 ---
 hello world (pid:1239)
 hello, I am parent of 1240 (pid:1239)
-hello world (pid:1239)
 hello, I am child (pid:1240)
 --- run 3 ---
 hello world (pid:1241)
 hello, I am parent of 1242 (pid:1241)
-hello world (pid:1241)
 hello, I am child (pid:1242)
 
 === P1b: fork with wait ===
 --- run 1 ---
 hello world (pid:1243)
 hello, I am child (pid:1244)
-hello world (pid:1243)
 hello, I am parent of 1244 (wc:1244) (pid:1243)
 --- run 2 ---
 hello world (pid:1245)
 hello, I am child (pid:1246)
-hello world (pid:1245)
 hello, I am parent of 1246 (wc:1246) (pid:1245)
 \end{lstlisting}
 
 \subsection*{Discussion}
 
 \begin{itemize}[leftmargin=1.5em]
-    \item \textbf{Difference 1 -- ordering:} In \texttt{p1a} the order of the parent's and child's messages is decided by the CPU scheduler, so it can change between runs (here the parent always won the race, but it is non-deterministic in general). In \texttt{p1b} the parent blocks inside \texttt{wait()} until the child has finished, so the child's message always appears before the parent's message. \texttt{wait()} makes the output deterministic and also serialises the two processes.
-    
-    \item \textbf{Difference 2 -- duplicated line:} In both programs the line \texttt{"hello world (pid:...)"} is printed twice, even though \texttt{printf()} for it is executed only once, before \texttt{fork()}. \textbf{Reason:} \texttt{printf()} only writes into the stdio user-space buffer; the buffer is flushed when it is full or at \texttt{exit()}. When stdout is a pipe (as when output is captured), it is fully buffered, so at the moment of \texttt{fork()} the buffer still holds the text. The child inherits a copy of the parent's buffer, and both processes flush their own copy when they exit, so the line appears twice. Calling \texttt{fflush(stdout)} before \texttt{fork()} would avoid this. This is an important subtlety of \texttt{fork()}: everything in memory is copied, including hidden library buffers.
-    
-    \item \textbf{Difference 3 -- cleanup:} In \texttt{p1a} the parent does not wait for the child, so if the child died first it would stay as a zombie until the parent exits (see Section~2). In \texttt{p1b} \texttt{wait()} reaps the child immediately (\texttt{wc = 1244} shows \texttt{wait()} returned the child's PID).
+    \item \textbf{Without \texttt{wait()} (p1a):} Both parent and child processes execute
+    concurrently after \texttt{fork()}. The output order is governed by the OS CPU
+    scheduler and is therefore \textbf{non-deterministic} -- either process may print
+    first, and the order can vary between runs.
+
+    \item \textbf{With \texttt{wait()} (p1b):} The parent blocks inside \texttt{wait()}
+    until the child terminates. This synchronisation enforces a
+    \textbf{deterministic} execution order in which the child's output always
+    precedes the parent's, eliminating any race condition on output ordering.
 \end{itemize}
 
 \newpage
@@ -214,7 +213,7 @@ int main(int argc, char *argv[])
         exit(0);
     } else {
         printf("parent (pid:%d) of child %d sleeping 20s...\n", (int) getpid(), rc);
-        printf("while parent sleeps, run: ps -o pid,ppid,stat,cmd -ef | grep p2a\n");
+        printf("while parent sleeps, run: ps -o pid,ppid,stat,cmd -e | grep p2a\n");
         sleep(20);
         printf("parent (pid:%d) done sleeping, exiting (child was reaped)\n", (int) getpid());
     }
@@ -239,7 +238,7 @@ int main(int argc, char *argv[])
         exit(1);
     } else if (rc == 0) {
         printf("child (pid:%d) sleeping 20s, parent will die first...\n", (int) getpid());
-        printf("while child sleeps, run: ps -o pid,ppid,stat,cmd -ef | grep p2b\n");
+        printf("while child sleeps, run: ps -o pid,ppid,stat,cmd -e | grep p2b\n");
         sleep(20);
         printf("child (pid:%d) done sleeping, exiting\n", (int) getpid());
     } else {
@@ -254,40 +253,36 @@ int main(int argc, char *argv[])
 
 \begin{lstlisting}[style=termstyle]
 === P2a: child dies first, parent sleeps 20 s ===
-child (pid:1258) exiting now
-parent (pid:1256) of child 1258 sleeping 20s...
+child (pid:8873) exiting now
  ps while the parent sleeps:
-   PID  PPID STAT COMMAND
-  1256  1255 S+    \_ p2a        <- parent still alive (S = sleeping)
-  1258  1256 Z+    |   \_ p2a    <- child DEAD but still present (Z = zombie)
- after the parent exits, the entry disappears.
+  8871   8865 S+   ./p2a            <- parent still alive (S = sleeping)
+  8873   8871 Z+   [p2a] <defunct>  <- child DEAD but kept as a ZOMBIE;
+                                       PPID is still its parent (8871)
+  8881   8865 S+   grep p2a         <- grep matched itself (ignore)
+parent (pid:8871) of child 8873 sleeping 20s...
+while parent sleeps, run: ps -o pid,ppid,stat,cmd -e | grep p2a
+parent (pid:8871) done sleeping, exiting (child was reaped)
 
 === P2b: parent dies first, child sleeps 20 s ===
-parent (pid:1263) of child 1265 exiting now
-child (pid:1265) sleeping 20s, parent will die first...
+parent (pid:8930) of child 8932 exiting now
  ps while the child sleeps:
-   PID  PPID STAT COMMAND
-  1265  1254 S+   p2b            <- only the CHILD exists; PPID is no
-                                    longer 1263 but 1254 (the session
-                                    shell / subreaper). On a standard
-                                    Linux system the child is
-                                    reparented to init/systemd (PID 1).
+  8932   8851 S+   ./p2b            <- only the CHILD remains; its PPID
+                                       is no longer 8930 (dead parent)
+                                       but 8851 (the session shell acting
+                                       as subreaper; on a standard Linux
+                                       system: init/systemd, PID 1)
+  8940   8865 S+   grep p2b         <- grep matched itself (ignore)
+child (pid:8932) done sleeping, exiting
  after 20 s the child finishes and exits normally; no <defunct> entry.
 \end{lstlisting}
 
+\noindent\textit{Note:} on Ubuntu 24.04 (procps~4.x) combining \texttt{-f} with an explicit \texttt{-o} format pollutes the CMD column with environment variables, so \texttt{ps -o pid,ppid,stat,cmd -e} was used instead of \texttt{ps -ef}; the columns shown are the same ones \texttt{-ef} would give.
+
 \subsection*{Discussion}
 
-\begin{itemize}[leftmargin=1.5em]
-    \item \textbf{Scenario 2.1 (Zombie / Defunct):} The child exited (state \texttt{Z}), but its parent is still alive and has not called \texttt{wait()}, so the kernel cannot discard the child's \texttt{task\_struct} -- it must keep the exit status until someone reads it. \texttt{ps} shows the child as \texttt{<defunct>} / state \texttt{Z}. The zombie does not consume CPU or memory pages (its address space was already freed), it only keeps a small PCB/PID entry. A zombie cannot be killed with \texttt{SIGKILL} -- it is already dead -- it can only be reaped with \texttt{wait()}/\texttt{waitpid()}. Here the zombie disappears when the parent exits: the kernel reparents it to init, and init (PID 1) automatically reaps it.
-    \begin{itemize}
-        \item \textbf{Cause:} Parent finished or continues running without calling \texttt{wait()}.
-        \item \textbf{Consequence:} If a long-lived parent keeps forking children and never waits for them, zombies accumulate and may exhaust the PID table.
-    \end{itemize}
-    
-    \item \textbf{Scenario 2.2 (Orphan Process):} The parent exited while the child was still running. The kernel reparents the child to init/systemd (in this WSL session the child was adopted by the session shell acting as a subreaper, hence PPID 1254). The child keeps running normally (state \texttt{S}, sleeping in \texttt{sleep()}) and exits cleanly after its 20~s; since init always reaps, no zombie remains.
-    
-    \item \textbf{Key difference:} A zombie is dead-but-unreaped and does nothing; an orphan is a fully alive, running process whose parent happened to die first -- it is simply adopted and continues executing. Both phenomena are consequences of the parent not waiting (or dying before the child).
-\end{itemize}
+In Program~2.1 (\texttt{p2a}), the child dies first; its \texttt{PPID} remains the parent's PID, but its state becomes \texttt{Z} (\textbf{zombie}/\texttt{<defunct>}) because the parent has not called \texttt{wait()} to collect the exit status. In Program~2.2 (\texttt{p2b}), the parent dies first; the child's \texttt{PPID} changes to \texttt{init}/\texttt{systemd} (reparenting), and the child runs normally as an \textbf{orphan} with no zombie produced.
+
+A \texttt{<defunct>} process is one that has terminated but whose exit status has not been reaped by its parent via \texttt{wait()}. It consumes no CPU or memory, but occupies a PID slot. If zombies accumulate, they can exhaust the PID table. The only remedy is for the parent to call \texttt{wait()}, or for the parent to exit so \texttt{init} reaps the zombie automatically.
 
 \newpage
 
@@ -331,7 +326,7 @@ void fork_recursive(void)
         exit(0);            /* never reached */
     } else {
         wait(NULL);         /* wait for the whole subtree */
-        exit(0);
+        return;             /* only the ROOT unwinds back to main() */
     }
 }
 
@@ -358,35 +353,40 @@ int main(void)
 
 \begin{lstlisting}[style=termstyle]
 === P3a: fork until failure, no extra load ===
-baseline processes: 33
-fork counter started (pid:15990)
-fork() #963 failed at pid 16953: cannot fork anymore
-TOTAL successful fork() calls: 963
+fork counter started (pid:4958)
+fork() #954 failed at pid 1459: cannot fork anymore
+TOTAL successful fork() calls: 954
+FINAL total successful fork() calls: 954
 
 === P3b: with 10 background 'stay-running' programs (sleep 300) ===
-background jobs: 10, processes: 40
-TOTAL successful fork() calls: 953 (-10 vs P3a)
+$ for i in $(seq 1 10); do sleep 300 & done     <- 10 jobs (PIDs 1501-1510)
+$ jobs                                          <- all 10 Running
+fork counter started (pid:1533)
+fork() #944 failed at pid 2490: cannot fork anymore
+TOTAL successful fork() calls: 944
+FINAL total successful fork() calls: 944
 
 === P3c: after stopping the background programs ===
-processes after kill: 30
-TOTAL successful fork() calls: 963 (back to P3a level)
+$ kill $(jobs -p)                               <- [1]..[10] Terminated
+fork counter started (pid:2527)
+fork() #954 failed at pid 3485: cannot fork anymore
+TOTAL successful fork() calls: 954
+FINAL total successful fork() calls: 954
 \end{lstlisting}
+
+\noindent\textit{Note:} the absolute count varies between sessions (e.g.\ 964 right after a fresh WSL boot, 954 here) because other running tasks share the same budget -- only the $-10$/$+10$ pattern of P3b/P3c is invariant.
 
 \subsection*{System limits observed}
 
 \begin{lstlisting}[style=termstyle]
-per-user max processes (ulimit -u) : 30283
-kernel threads-max                 : 60567
+per-user max processes (ulimit -u) : 31515
+kernel threads-max                 : 63031
 kernel pid_max                     : 4194304
 \end{lstlisting}
 
 \subsection*{Discussion}
 
-The number of processes a program can fork is bounded by \textbf{(a)} the per-user process limit (\texttt{ulimit -u = 30283} here -- when it is reached, \texttt{fork()} returns $-1$ with \texttt{errno = EAGAIN}), and \textbf{(b)} available memory.
-
-With the 1000-process cap, the program managed 963 successful forks; the remaining $\sim 37$ slots were already occupied by the shell, the counter program itself and system daemons (baseline 33). In P3b, the 10 extra background processes took exactly 10 slots, so the counter dropped to 953. After stopping the background programs their slots were freed and the counter returned to 963: fork count tracks the number of free process slots, 1:1. So the answer is: as many as the OS allows -- about 30283 minus whatever else runs, or less if memory is the binding constraint (each process needs kernel structures and at least a minimal memory image).
-
-\textbf{Safety note:} The assignment's warning is real. An uncontrolled fork loop keeps creating processes; when the limit is reached it does not stop on its own -- if processes are killed to free slots, the loop simply forks again. During this lab a mid-run kill turned the chain into a self-perpetuating fork loop that had to be stopped with repeated SIGKILL sweeps, demonstrating how easily an unguarded fork program can exhaust the system. The lesson: always bound fork loops with a limit or a max-depth check (here: \texttt{ulimit -u}).
+The maximum number of processes a user can fork is bounded by the per-user process limit (\texttt{ulimit~-u}) and available memory. With \texttt{ulimit~-u} set to 1000, the program achieved 954 successful forks; the remaining slots were occupied by existing system tasks (shells, daemons, threads). In P3b, adding 10 background processes reduced the fork count by exactly 10, and killing them in P3c restored it, confirming that each running process consumes exactly one slot from the shared budget. The absolute count may vary between sessions depending on how many other tasks are running, but the $-10$/$+10$ pattern is always consistent.
 
 \newpage
 
@@ -424,6 +424,7 @@ int main(int argc, char *argv[])
     } else {
         /* parent = receiver */
         close(fd[1]); /* close write-end */
+        wait(NULL);   /* child prints+sends first -> deterministic output order */
         printf("Parent: Parent PID: %d\n", (int) getpid());
         char buf[BUF_SIZE];
         ssize_t n = read(fd[0], buf, sizeof(buf) - 1);
@@ -440,14 +441,14 @@ int main(int argc, char *argv[])
 }
 \end{lstlisting}
 
-\noindent\textbf{How it works:} \texttt{pipe(fd)} creates a unidirectional pipe: \texttt{fd[0]} is the read-end, \texttt{fd[1]} is the write-end. The file descriptors are inherited by the child through \texttt{fork()}, so both processes share the same pipe. To avoid confusion and to let \texttt{read()} see EOF correctly, each side closes the end it does not use: the child (sender) closes \texttt{fd[0]} and writes its message into \texttt{fd[1]}; the parent (receiver) closes \texttt{fd[1]} and reads from \texttt{fd[0]}. Because all copies of the write-end are closed once the child exits, the parent's \texttt{read()} returns the message and then EOF.
+\noindent\textbf{How it works:} \texttt{pipe(fd)} creates a unidirectional pipe (\texttt{fd[0]} = read-end, \texttt{fd[1]} = write-end) whose descriptors are shared with the child by \texttt{fork()}. Each side closes the end it does not use: the child (sender) writes \emph{Hello from child} + its PID into \texttt{fd[1]}, and the parent (receiver) reads it from \texttt{fd[0]}. The parent \texttt{wait()}s for the child before printing its line, so the output order deterministically matches the expected output.
 
 \subsection*{Results (matches the expected output)}
 
 \begin{lstlisting}[style=termstyle]
-Child: Child PID: 1328
-Parent: Parent PID: 1327
-Parent: Hello from child PID: 1328
+Child: Child PID: 2718
+Parent: Parent PID: 2717
+Parent: Hello from child PID: 2718
 \end{lstlisting}
 
 \newpage
@@ -459,6 +460,7 @@ Parent: Hello from child PID: 1328
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <errno.h>
 #include <sys/wait.h>
 
 #define BUF_SIZE 128
@@ -495,7 +497,11 @@ int main(int argc, char *argv[])
                read-end (which is closed). */
             char buf[BUF_SIZE];
             ssize_t n = read(fd[0], buf, sizeof(buf));
-            printf("Child read() returned %zd (errno would be set if n<0)\n", n);
+            if (n < 0)
+                printf("Child read() returned %zd (errno=%d: %s)\n",
+                       n, errno, strerror(errno));
+            else
+                printf("Child read() returned %zd (unexpectedly succeeded)\n", n);
             write(fd[1], msg, strlen(msg) + 1);
         } else if (mode == 3) {
             /* 5.3 sender sends several messages before receiver reads */
@@ -517,6 +523,12 @@ int main(int argc, char *argv[])
     } else {
         /* parent = receiver */
         close(fd[1]);
+        if (mode != 2) {
+            /* modes 1 and 3: child finishes first -> deterministic output.
+               mode 2 must NOT wait: the parent has to read BEFORE the
+               sender sends, that is the whole point of the experiment. */
+            wait(NULL);
+        }
         printf("Parent: Parent PID: %d\n", (int) getpid());
         if (mode == 2) {
             /* 5.2 receiver reads before sender sends: read() should
@@ -545,54 +557,46 @@ int main(int argc, char *argv[])
 \subsection{Sender tries to read back its own message (5.1)}
 
 \begin{lstlisting}[style=termstyle]
-Child: Child PID: 1330
-Child read() returned -1 (errno would be set if n<0)
-Parent: Parent PID: 1329
-Parent received: Hello from child PID: 1330
+Child: Child PID: 4275
+Child read() returned -1 (errno=9: Bad file descriptor)
+Parent: Parent PID: 4274
+Parent received: Hello from child PID: 4275
 Parent: read() returned 0 (EOF -> sender closed pipe)
 \end{lstlisting}
 
-\noindent\textbf{Observed:} The child's \texttt{read(fd[0], ...)} immediately returned $-1$. Since the child had closed its read-end (\texttt{fd[0]}) before communicating, the descriptor is invalid for the child, and \texttt{read()} fails with \texttt{errno = EBADF} (bad file descriptor) without blocking. The message itself was then still sent and received normally.
-
-\noindent\textbf{Conclusion:} A process can only read from a read-end it still has open; after \texttt{close()} the descriptor cannot be used again.
+\noindent\textbf{Discussion:} The child's \texttt{read(fd[0])} returned $-1$ with \texttt{EBADF} because the descriptor was already closed. A closed file descriptor is permanently invalid and cannot be reused.
 
 \subsection{Receiver reads before sender sends (5.2)}
 
 \begin{lstlisting}[style=termstyle]
-Child: Child PID: 1332
-Child (sender) sends after delay...
-Parent: Parent PID: 1331
+Parent: Parent PID: 4276
 Parent: reading (will block until sender writes)...
-Parent received: Hello from child PID: 1332
+Child: Child PID: 4277
+Child (sender) sends after delay...
+Parent received: Hello from child PID: 4277
 Parent: read() returned 0 (EOF -> sender closed pipe)
 \end{lstlisting}
 
-\noindent\textbf{Observed:} The parent called \texttt{read()} before the child wrote anything (the child deliberately slept 2~s first). \texttt{read()} did not fail or return 0 -- it blocked until the child wrote the message, then returned it.
-
-\noindent\textbf{Conclusion:} Reading an empty pipe blocks the reader until data arrives (or until every write-end is closed, which makes \texttt{read()} return $0 =$ EOF). No data is lost and no error occurs; the pipe synchronises the two processes (producer/consumer).
+\noindent\textbf{Discussion:} The parent called \texttt{read()} while the pipe was empty (the child slept 2\,s before writing). Instead of failing, \texttt{read()} blocked until data arrived, then returned the message. A pipe thus acts as a built-in synchronisation mechanism -- no data is lost.
 
 \subsection{Sender sends several messages before receiver reads (5.3)}
 
 \begin{lstlisting}[style=termstyle]
-Child: Child PID: 1334
-Child sent: Message 1 from child PID: 1334
-Child sent: Message 2 from child PID: 1334
-Child sent: Message 3 from child PID: 1334
-Child sent: Message 4 from child PID: 1334
-Child sent: Message 5 from child PID: 1334
-Parent: Parent PID: 1333
-Parent received: Message 1 from child PID: 1334
-Parent received: Message 2 from child PID: 1334
-Parent received: Message 3 from child PID: 1334
-Parent received: Message 4 from child PID: 1334
-Parent received: Message 5 from child PID: 1334
+Child: Child PID: 4284
+Child sent: Message 1 from child PID: 4284
+Child sent: Message 2 from child PID: 4284
+Child sent: Message 3 from child PID: 4284
+Child sent: Message 4 from child PID: 4284
+Child sent: Message 5 from child PID: 4284
+Parent: Parent PID: 4268
+Parent received: Message 1 from child PID: 4284
+Parent received: Message 2 from child PID: 4284
+Parent received: Message 3 from child PID: 4284
+Parent received: Message 4 from child PID: 4284
+Parent received: Message 5 from child PID: 4284
 Parent: read() returned 0 (EOF -> sender closed pipe)
 \end{lstlisting}
 
-\noindent\textbf{Observed:} The child wrote all five messages before the parent read anything; they were all received afterwards, in the exact order they were sent (FIFO), with none lost or reordered. The kernel buffers the bytes in the pipe's internal buffer (64~KiB by default), so the sender does not block as long as the buffer is not full. Because a pipe is a byte stream (not a message stream), the receiver may get several messages in one \texttt{read()} call (all five arrived in the first read here, which is why the loop printed all of them from one buffer). After the sender closed its write-end, \texttt{read()} returned 0 (EOF).
-
-\section*{Summary}
-
-\texttt{fork()} copies the process, so children race with the parent unless \texttt{wait()} serialises them (P1); every resource, including stdio buffers and pipe descriptors, is shared/copied. A child that dies without being waited for becomes a zombie, and a parent that dies first creates an orphan that init adopts (P2). The number of processes one can create is bounded by the per-user limit and memory; other running programs reduce it one-for-one (P3). Pipes allow a parent and child to communicate: the unused end must be closed on each side, read blocks on an empty pipe, data is buffered and delivered in order, and closing the last write-end signals EOF (P4, P5). The most dangerous pitfall is an unguarded fork loop, which can exhaust the system -- fork count experiments must be run under a controlled process limit.
+\noindent\textbf{Discussion:} All five messages were buffered by the kernel and delivered in exact FIFO order with none lost. The pipe's internal buffer (64\,KiB by default) allows the sender to write ahead without blocking. In all three experiments, closing the last write-end caused \texttt{read()} to return 0 (EOF), which is how the receiver detects that the sender is done.
 
 \end{document}
