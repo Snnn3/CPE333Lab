@@ -1,0 +1,467 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\geometry{margin=1in}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{hyperref}
+\usepackage{array}
+
+\definecolor{codegreen}{RGB}{10,120,40}
+\definecolor{codegray}{RGB}{128,128,128}
+\definecolor{codeblue}{RGB}{10,60,180}
+
+\lstdefinestyle{bashstyle}{
+  language=bash,
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{codeblue},
+  commentstyle=\color{codegreen},
+  stringstyle=\color{codegray},
+  frame=single,
+  rulecolor=\color{codegray},
+  breaklines=true,
+  showstringspaces=false,
+  numbers=none
+}
+
+\lstdefinestyle{cstyle}{
+  language=C,
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{codeblue},
+  commentstyle=\color{codegreen},
+  stringstyle=\color{codegray},
+  frame=single,
+  rulecolor=\color{codegray},
+  breaklines=true,
+  showstringspaces=false,
+  numbers=left,
+  numbersep=5pt,
+  numberstyle=\tiny\color{codegray}
+}
+
+\title{\textbf{CPE 333 Operating Systems --- Problem Session Week \#3}\\Process Manipulation and Monitoring}
+\author{
+  \begin{tabular}{c}
+    Student Name 1 \quad (ID: 12345678) \\
+    Student Name 2 \quad (ID: 12345678) \\
+    Student Name 3 \quad (ID: 12345678) \\
+    Student Name 4 \quad (ID: 12345678) \\
+  \end{tabular}
+}
+\date{Term 1/2026}
+
+\begin{document}
+
+\maketitle
+\thispagestyle{empty}
+
+\newpage
+\tableofcontents
+\newpage
+
+%=====================================================================
+\section{Task 1: Important Linux Commands for Manipulating and Monitoring Processes}
+
+\subsection{Difference between \texttt{top} and \texttt{ps}}
+
+Both \texttt{top} and \texttt{ps} are used to inspect the processes currently running on a
+Linux system, but they serve different purposes. The table below summarizes their main
+differences.
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{@{}p{0.42\textwidth}p{0.50\textwidth}@{}}
+\toprule
+\textbf{\texttt{ps}} & \textbf{\texttt{top}} \\
+\midrule
+Static: prints a one-time snapshot of the processes and exits. &
+Dynamic: continuously refreshes and displays a live view of system activity. \\
+Runs once and terminates; good for scripting and piping (e.g.\ \texttt{ps aux | grep ssh}). &
+Stays running until the user quits (usually with \texttt{q}). \\
+Lists every process in one long output. &
+Shows a summarized, screen-sized dashboard updated every few seconds. \\
+Usually not sortable by usage without extra flags. &
+Sorts by CPU/memory usage by default. \\
+Lightweight, does not repeatedly consume CPU. &
+Uses some CPU because it keeps refreshing the display. \\
+\bottomrule
+\end{tabular}
+\caption{Difference between \texttt{ps} and \texttt{top}.}
+\end{table}
+
+In short, \texttt{ps} gives the user a \emph{snapshot} of the process table at one moment,
+while \texttt{top} gives a \emph{live, updating} view that is more useful for monitoring.
+
+\bigskip
+
+\begin{lstlisting}[style=bashstyle]
+$ ps aux                      # one-time snapshot
+$ top                         # live, refreshing monitor (quit with 'q')
+\end{lstlisting}
+
+\subsection{Purpose of the \texttt{nice} command}
+
+The \texttt{nice} command runs a program with an adjusted \emph{scheduling priority}. Each
+process has a ``niceness'' value that tells the kernel's scheduler how much CPU it should be
+given. A higher niceness means a \emph{lower} priority (the process is ``nicer'' and waits
+longer), while a lower (even negative) niceness means a \emph{higher} priority.
+
+\begin{itemize}[leftmargin=2em]
+  \item Niceness range: from $-20$ (highest priority) to $+19$ (lowest priority).
+  \item Default niceness is $0$.
+  \item Only a privileged (root) user may set a \emph{negative} niceness.
+\end{itemize}
+
+Example of how to \emph{nice} a process:
+
+\begin{lstlisting}[style=bashstyle]
+$ nice -n 10 ./my_program      # run with niceness 10 (lower priority)
+$ nice -5 ./my_program         # run with niceness -5 (root only, higher priority)
+$ renice -n 5 -p 1234          # change priority of running process PID 1234
+\end{lstlisting}
+
+\subsection{How to kill processes and/or jobs}
+
+The \texttt{kill} command sends a \emph{signal} to a running process, identified by its PID
+(Process ID). The most common signals are \texttt{SIGTERM} (15), which politely asks the
+process to terminate, and \texttt{SIGKILL} (9), which forcibly stops it immediately.
+
+\begin{lstlisting}[style=bashstyle]
+$ ps aux | grep my_program      # find the PID of the process
+$ kill 1234                     # send SIGTERM (graceful shutdown)
+$ kill -9 1234                  # send SIGKILL (force kill)
+$ killall my_program            # kill all processes with this name
+$ pkill my_program              # kill by name pattern
+$ jobs                          # list background / suspended jobs
+$ kill %1                       # kill job number 1
+\end{lstlisting}
+
+\begin{lstlisting}[style=bashstyle]
+$ ps aux | grep ss1_1
+ssiriwan  5678  0.0  0.1  12345  2345 pts/0  S  10:00  0:00 ./ss1_1.sh
+$ kill 5678                     # gracefully terminate our script
+$ kill -9 5678                  # forcibly terminate if it ignored SIGTERM
+\end{lstlisting}
+
+%=====================================================================
+\section{Task 2: Running the Shell Scripts in Different Ways}
+
+\subsection{First situation: \texttt{ss1\_1.sh}}
+
+Script \texttt{ss1\_1.sh} simply calls \texttt{sleep} for 10~seconds:
+
+\begin{lstlisting}[style=bashstyle]
+#!/bin/bash
+for i in $(seq 1 10); do
+  sleep 1
+done
+\end{lstlisting}
+
+The same script is run in two different ways, and the behaviour differs.
+
+\subsubsection*{Run in the foreground: \texttt{./ss1\_1.sh}}
+Running without the ampersand puts the script in the \emph{foreground} of the current shell.
+\begin{itemize}[leftmargin=2em]
+  \item The terminal is occupied and the prompt does not return until the script finishes
+        (after 10 seconds).
+  \item The user cannot type other commands while it runs (in the same terminal).
+  \item Pressing \texttt{CTRL+C} interrupts and terminates it.
+\end{itemize}
+
+\begin{lstlisting}[style=bashstyle]
+$ ./ss1_1.sh        # prompt disappears for ~10 s, then returns
+\end{lstlisting}
+
+\subsubsection*{Run in the background: \texttt{./ss1\_1.sh \&}}
+Adding the ampersand runs the process in the \emph{background}.
+\begin{itemize}[leftmargin=2em]
+  \item The terminal prompt \emph{returns immediately}.
+  \item The system prints a job number and PID, e.g.\ \texttt{[1] 1234}.
+  \item The shell can keep accepting new commands while the script still runs.
+  \item Control is handed back to the user right away.
+\end{itemize}
+
+\begin{lstlisting}[style=bashstyle]
+$ ./ss1_1.sh &
+[1] 5678            # job number [1], PID 5678, prompt returns immediately
+\end{lstlisting}
+
+\subsubsection*{Discussion of the difference}
+\begin{itemize}[leftmargin=2em]
+  \item In the foreground case (step 3) the shell \emph{blocks} waiting for the script to
+        finish, so the user cannot do anything else in that terminal.
+  \item In the background case (step 4) a \emph{new process} is spawned and the shell
+        immediately returns control, so the user can keep working while the script sleeps in
+        the background.
+  \item Thus \texttt{\&} detaches the job from the terminal and lets the shell continue.
+\end{itemize}
+
+\subsection{Second situation: \texttt{ss1\_2.sh}}
+
+Script \texttt{ss1\_2.sh} sleeps for a long time, making it easy to suspend:
+
+\begin{lstlisting}[style=bashstyle]
+#!/bin/bash
+sleep 1000
+\end{lstlisting}
+
+\subsubsection*{Ctrl+Z (suspend)}
+After starting the script in the foreground and pressing \texttt{CTRL+Z}, the process is
+\emph{suspended} (stopped), not terminated. It is placed in the job table.
+
+\begin{lstlisting}[style=bashstyle]
+$ ./ss1_2.sh
+^Z
+[1]+  Stopped                 ./ss1_2.sh
+\end{lstlisting}
+
+Using the \texttt{jobs} command shows the suspended job:
+
+\begin{lstlisting}[style=bashstyle]
+$ jobs
+[1]+  Stopped                 ./ss1_2.sh
+\end{lstlisting}
+
+\textbf{Result and discussion:} pressing \texttt{CTRL+Z} sends the \texttt{SIGTSTP}
+signal, which \emph{pauses} the process. The process is \emph{not} killed; it remains in the
+process table, but it no longer runs on the CPU. The \texttt{jobs} command shows it as
+``Stopped''. Control returns to the shell prompt.
+
+\subsubsection*{The \texttt{fg} and \texttt{bg} commands}
+A suspended job can be resumed with either \texttt{fg} (foreground) or \texttt{bg}
+(background).
+
+\begin{lstlisting}[style=bashstyle]
+$ fg %1     # resume job 1 in the FOREGROUND (shell waits for it)
+$ bg %1     # resume job 1 in the BACKGROUND (shell frees up immediately)
+\end{lstlisting}
+
+\textbf{Difference between \texttt{fg} and \texttt{bg}:}
+\begin{itemize}[leftmargin=2em]
+  \item \texttt{fg} brings the stopped job back into the \emph{foreground}: the shell waits
+        until it finishes, and the terminal is occupied again. It keeps running until it
+        completes or is stopped again.
+  \item \texttt{bg} resumes the job in the \emph{background}: the shell immediately returns
+        the prompt so the user can keep working. The process keeps running in parallel.
+  \item Both resume the same suspended process; they only differ in \emph{where} it runs and
+        whether the shell waits for it.
+\end{itemize}
+
+%=====================================================================
+\section{Task 5: STCF (Shortest Time to Completion First) Scheduler}
+
+\subsection{Algorithm overview}
+
+STCF, also known as \emph{Shortest Remaining Time First (SRTF)}, is a \emph{preemptive}
+scheduling algorithm. At every time slot the scheduler selects, among the processes that have
+already arrived, the one with the \emph{shortest remaining burst time}. This minimizes the
+average turnaround time. If a new process with a shorter remaining time arrives while another
+is running, the running process is preempted.
+
+The rules given in the assignment are:
+\begin{itemize}[leftmargin=2em]
+  \item The scheduler and context switch are considered to take \emph{zero} time (not counted
+        as CPU usage).
+  \item A process that ``arrives at time $T$'' is available at the very end of time $T-1$,
+        before the ready queue is updated for time $T$.
+  \item If several processes arrive at the same time, sort by \texttt{process\_id}.
+  \item If several processes have the same remaining time, sort by \texttt{process\_id}.
+\end{itemize}
+
+The provided \texttt{PS3.c} reads a CSV file containing \texttt{pid,arrival,burst} for each
+process, converts it into a struct, and passes it to the scheduler function, which decides
+which process runs during each time slot.
+
+\begin{lstlisting}[style=bashstyle]
+./PS3 case1.csv
+./PS3 case2.csv
+./PS3 case3.csv
+\end{lstlisting}
+
+\subsection{The scheduler function}
+
+\begin{lstlisting}[style=cstyle]
+/*
+ * Scheduler function for PS3.c  (STCF / Shortest Remaining Time First)
+ * processes[] : array of processes (pid, arrival, burst)
+ * n           : number of processes
+ *
+ * Simulates, slot by slot, which process is running, and prints the
+ * resulting timeline: "Time X-Y : Process P"
+ */
+void stcf(struct Process p[], int n) {
+    int remaining[MAX];
+    int completed = 0;
+    int t = 0;
+    /* copy burst into remaining */
+    for (int i = 0; i < n; i++)
+        remaining[i] = p[i].burst;
+
+    /* a process is done when remaining == 0 */
+    int finslots[MAX] = {0};
+
+    while (completed < n) {
+        int chosen = -1;
+
+        /* pick the arrived, unfinished process with the smallest remaining time;
+           break ties by process_id */
+        for (int i = 0; i < n; i++) {
+            if (p[i].arrival <= t && remaining[i] > 0) {
+                if (chosen == -1 ||
+                    remaining[i] <  remaining[chosen] ||
+                    (remaining[i] == remaining[chosen] &&
+                     p[i].pid      <  p[chosen].pid)) {
+                    chosen = i;
+                }
+            }
+        }
+
+        if (chosen == -1) {
+            t++;                    /* CPU idle: nothing has arrived yet */
+            continue;
+        }
+
+        /* run the chosen process for one time slot */
+        printf("Time %2d-%2d : Process %d\n", t, t + 1, p[chosen].pid);
+        remaining[chosen]--;
+        if (remaining[chosen] == 0)
+            completed++;
+        t++;
+    }
+}
+\end{lstlisting}
+
+\textit{Note: replace the section above with a screenshot of your actual function as required
+by the assignment.}
+
+\subsection{Results of the three test cases}
+
+\subsubsection{Case 1 (\texttt{case1.csv})}
+Input:
+\begin{center}
+\begin{tabular}{ccc}
+\toprule
+pid & arrival & burst \\
+\midrule
+1 & 0 & 7 \\
+2 & 2 & 4 \\
+3 & 4 & 1 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Output timeline:
+\begin{center}
+\begin{tabular}{cc}
+\toprule
+Time slot & Running process \\
+\midrule
+0--1  & Process 1 \\
+1--2  & Process 1 \\
+2--3  & Process 2 \\
+3--4  & Process 2 \\
+4--5  & Process 3 \\
+5--6  & Process 2 \\
+6--7  & Process 2 \\
+7--8  & Process 1 \\
+8--9  & Process 1 \\
+9--10 & Process 1 \\
+10--11 & Process 1 \\
+11--12 & Process 1 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsubsection{Case 2 (\texttt{case2.csv})}
+Input:
+\begin{center}
+\begin{tabular}{ccc}
+\toprule
+pid & arrival & burst \\
+\midrule
+1 & 0 & 2 \\
+2 & 5 & 3 \\
+3 & 5 & 3 \\
+4 & 6 & 1 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Output timeline (the CPU is idle between time 2 and time 5):
+\begin{center}
+\begin{tabular}{cc}
+\toprule
+Time slot & Running process \\
+\midrule
+0--1  & Process 1 \\
+1--2  & Process 1 \\
+2--5  & (idle) \\
+5--6  & Process 2 \\
+6--7  & Process 4 \\
+7--8  & Process 2 \\
+8--9  & Process 2 \\
+9--10 & Process 3 \\
+10--11 & Process 3 \\
+11--12 & Process 3 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsubsection{Case 3 (\texttt{case3.csv})}
+Input:
+\begin{center}
+\begin{tabular}{ccc}
+\toprule
+pid & arrival & burst \\
+\midrule
+2 & 0 & 5 \\
+1 & 3 & 2 \\
+3 & 6 & 1 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Output timeline:
+\begin{center}
+\begin{tabular}{cc}
+\toprule
+Time slot & Running process \\
+\midrule
+0--1  & Process 2 \\
+1--2  & Process 2 \\
+2--3  & Process 2 \\
+3--4  & Process 1 \\
+4--5  & Process 1 \\
+5--6  & Process 2 \\
+6--7  & Process 2 \\
+7--8  & Process 3 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Discussion}
+
+The STCF scheduler works as expected in all three cases:
+\begin{itemize}[leftmargin=2em]
+  \item In \textbf{case 1}, process 3 arrives at time 4 with a very short burst (1). As soon
+        as it arrives it is selected, because its remaining time (1) is shorter than both
+        process 2 (4) and process 1 (7). This shows the preemptive nature of STCF: a newly
+        arrived short job is served immediately.
+  \item In \textbf{case 2}, two processes (2 and 3) arrive at the same time with the same
+        burst. Process 2 is chosen first because of the tie-breaking rule (smaller
+        \texttt{pid}). Process 4 arrives at time 6 with burst 1 and is executed immediately.
+        Note that process 2 is preempted by process 4 because 4 has a shorter remaining time.
+  \item In \textbf{case 3}, process 1 arrives at time 3 with the same remaining time as
+        process 2, so the tie is resolved by the smaller \texttt{pid}; later process 2 (with
+        remaining time 1) wins over process 3 at time 6 by the same rule.
+  \item STCF therefore always runs the job with the shortest remaining time, which generally
+        produces lower average turnaround times than non-preemptive algorithms such as FCFS or
+        SJF.
+\end{itemize}
+
+\end{document}
