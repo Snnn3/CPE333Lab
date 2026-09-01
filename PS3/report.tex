@@ -448,20 +448,10 @@ Time slot & Running process \\
 
 The STCF scheduler works as expected in all three cases:
 \begin{itemize}[leftmargin=2em]
-  \item In \textbf{case 1}, process 3 arrives at time 4 with a very short burst (1). As soon
-        as it arrives it is selected, because its remaining time (1) is shorter than both
-        process 2 (4) and process 1 (7). This shows the preemptive nature of STCF: a newly
-        arrived short job is served immediately.
-  \item In \textbf{case 2}, two processes (2 and 3) arrive at the same time with the same
-        burst. Process 2 is chosen first because of the tie-breaking rule (smaller
-        \texttt{pid}). Process 4 arrives at time 6 with burst 1 and is executed immediately.
-        Note that process 2 is preempted by process 4 because 4 has a shorter remaining time.
-  \item In \textbf{case 3}, process 1 arrives at time 3 with the same remaining time as
-        process 2, so the tie is resolved by the smaller \texttt{pid}; later process 2 (with
-        remaining time 1) wins over process 3 at time 6 by the same rule.
-  \item STCF therefore always runs the job with the shortest remaining time, which generally
-        produces lower average turnaround times than non-preemptive algorithms such as FCFS or
-        SJF.
+  \item \textbf{Case 1 (Preemption Flow and Short-Job Prioritization):} Process 1 executes from $t = 0\text{--}2$ (remaining burst: $5$), whereupon Process 2 arrives with burst $4$ and immediately preempts Process 1 ($4 < 5$), followed by Process 3 arriving at $t = 4$ (burst $1$) and preempting Process 2 ($1 < 2$), which demonstrates how STCF enforces dynamic multi-level preemption to minimize response and waiting times for newly arriving short tasks before allowing preempted processes (Process 2, then Process 1) to resume and finish at $t = 7$ and $t = 12$ respectively.
+  \item \textbf{Case 2 (CPU Idle State and Simultaneous Arrival Resolution):} After Process 1 completes at $t = 2$, the CPU remains idle from $t = 2\text{--}5$ until Process 2 and Process 3 arrive simultaneously with identical bursts of $3$, where Process 2 is selected first via the lower-PID tie-breaking rule ($\text{PID } 2 < \text{PID } 3$) and runs until $t = 6$ before being preempted by Process 4 (burst $1 < 2$), demonstrating that the scheduler robustly handles non-contiguous arrival gaps while applying deterministic tie-breaking to schedule simultaneous jobs before completing Process 2 ($t = 7\text{--}9$) and Process 3 ($t = 9\text{--}12$).
+  \item \textbf{Case 3 (Tie-Breaking Behavior on Equal Remaining Time):} Process 2 executes from $t = 0\text{--}3$ (remaining: $2$) until Process 1 arrives with burst $2$, triggering a preemption because Process 1 has the lower PID ($\text{PID } 1 < \text{PID } 2$), yet when Process 3 arrives at $t = 6$ (burst $1$) while the resumed Process 2 also has $1$ remaining unit, Process 2 is allowed to continue running without preemption ($\text{PID } 2 < \text{PID } 3$), which proves that the PID tie-breaking rule functions symmetrically to both preempt a running process and protect an ongoing execution whenever candidate processes share identical remaining execution times.
+  \item \textbf{Summary:} Overall, the STCF scheduler guarantees optimal average turnaround time by continuously dispatching the job closest to completion, seamlessly idling during arrival gaps, and resolving all collision scenarios through consistent PID-based tie-breaking.
 \end{itemize}
 
 \end{document}
