@@ -5,7 +5,7 @@
 \usepackage{listings}
 \usepackage{xcolor}
 \usepackage{enumitem}
-\usepackage{hyperref}
+\usepackage[hidelinks]{hyperref}
 \usepackage{graphicx}
 \usepackage{booktabs}
 
@@ -23,6 +23,7 @@
     frame=single,
     breaklines=true,
     tabsize=4,
+    showstringspaces=false,
     columns=fullflexible
 }
 
@@ -30,39 +31,48 @@
     basicstyle=\ttfamily\small,
     backgroundcolor=\color{codegray},
     frame=single,
-    breaklines=true
+    breaklines=true,
+    showstringspaces=false
 }
 
 \lstdefinestyle{outstyle}{
     basicstyle=\ttfamily\small,
     backgroundcolor=\color{codebg},
     frame=single,
-    breaklines=true
+    breaklines=true,
+    showstringspaces=false
 }
 
-\lstset{literate={_}{\_}1}
+\lstset{
+    showstringspaces=false,
+    showspaces=false,
+    showtabs=false,
+    literate={_}{\_}1
+}
 
 \title{\textbf{Problem Session 4: Memory Class and API in C Programming}\\
-\large CPE 334 Operating Systems, 1/2024}
+\large CPE 334 Operating Systems, 1/2026}
 \author{Department of Computer Engineering, Faculty of Engineering\\
-King Mongkut's University of Technology Thonburi}
+King Mongkut's University of Technology Thonburi\\[12pt]
+\begin{tabular}{ll}
+    \textbf{1.} Thanaboon Tikaew & \textbf{ID:} 67070501021 \\[3pt]
+    \textbf{2.} Chanon Lhumsa-ard & \textbf{ID:} 67070501059 \\[3pt]
+    \textbf{3.} Theeraphat Jaingam & \textbf{ID:} 67070501063 \\[3pt]
+    \textbf{4.} Siriwan Yindeephot & \textbf{ID:} 67070501075
+\end{tabular}}
 \date{}
 
 \begin{document}
 
 \maketitle
-\vspace{-1cm}
-
-\begin{center}
-\textit{Note: This lab must be done on a Unix-based OS (WSL/Ubuntu used)}
-\end{center}
+\vspace{0.5cm}
 
 \tableofcontents
 \newpage
 
 \section{Static Storage Class}
 
-\subsection{Step 1--3: Program static1.c}
+\subsection{Step 1: Program with static (\texttt{static1.c})}
 
 \begin{lstlisting}[style=cstyle]
 #include <stdio.h>
@@ -92,70 +102,213 @@ gcc -o static1 static1.c
 \begin{lstlisting}[style=outstyle]
 ===== RUN 1 =====
 The value of y is 6
-The address of y is 0x62a44b73d010
+The address of y is 0x5710b515b010
+
 The value of y is 7
-The address of y is 0x62a44b73d010
+The address of y is 0x5710b515b010
+
 The value of y is 8
-The address of y is 0x62a44b73d010
+The address of y is 0x5710b515b010
 
 ===== RUN 2 =====
 The value of y is 6
-The address of y is 0x574453f75010
+The address of y is 0x5fdf88e3f010
+
 The value of y is 7
-The address of y is 0x574453f75010
+The address of y is 0x5fdf88e3f010
+
 The value of y is 8
-The address of y is 0x574453f75010
+The address of y is 0x5fdf88e3f010
 
 ===== RUN 3 =====
 The value of y is 6
-The address of y is 0x608fe00ee010
+The address of y is 0x60520d2df010
+
 The value of y is 7
-The address of y is 0x608fe00ee010
+The address of y is 0x60520d2df010
+
 The value of y is 8
-The address of y is 0x608fe00ee010
+The address of y is 0x60520d2df010
 \end{lstlisting}
 
-\subsection*{Explanation Step 1--3}
-
-Within a single run, the value of $y$ increases to $6, 7, 8$ and the address of $y$ remains constant across all loop iterations. Normally, a local variable such as \verb|auto int x| is created and destroyed each time the block is entered/exited inside the loop. However, $y$ is \textbf{static}, which means:
-
+\subsubsection*{Explanation for Step 1}
 \begin{itemize}
-    \item It is initialized ($= 5$) only once when the program starts, even though it is declared inside the loop.
-    \item Its value and address reside in the \textbf{static memory / data segment}, not on the stack.
-    \item On the next loop iteration the value of $y$ is preserved (increasing from $5 \to 6 \to 7 \to 8$).
+    \item \textbf{Within a single run:} The variable $y$ is declared as \texttt{static int y = 5;}. Even though it is declared inside the \texttt{while} loop body, the initialization occurs only once at program startup. The variable is allocated in the \textbf{Data Segment} (static memory) rather than on the stack. Therefore, when the block exits and re-enters across loop iterations, $y$ is not re-initialized, preserving its value and accumulating from $5 \to 6 \to 7 \to 8$. Its address remain completely identical within the same run.
+    \item \textbf{Between different runs:} Each time the program is executed, the virtual memory address of $y$ changes (e.g., \texttt{0x5710...}, \texttt{0x5fdf...}, \texttt{0x6052...}). This is because GCC compiles executables as \textbf{PIE (Position Independent Executable)} by default, allowing the operating system to apply \textbf{ASLR (Address Space Layout Randomization)} to randomize the program's base load address for security.
 \end{itemize}
 
-\textbf{About the address between runs:} each time the program is executed the address of $y$ changes (e.g. \texttt{0x62a4...}, \texttt{0x5744...}, \texttt{0x608f...}) because the OS enables \textbf{ASLR (Address Space Layout Randomization)} --- every time the program is exec'ed the OS randomizes where the executable is laid out, so static/global data is placed at a different address in each run for security.
+\subsection{Step 2: Program without static (\texttt{static2.c})}
 
-\subsection{Step 4: compile with -no-pie}
+In this step, the \texttt{static} keyword is removed from the declaration of $y$ inside the loop:
 
+\begin{lstlisting}[style=cstyle]
+#include <stdio.h>
+#include <stdlib.h>
+
+void main()
+{
+    auto int x = 3;
+    while (x > 0)
+    {
+        int y = 5;      // "static" removed: automatic local variable
+        y++;
+        printf("The value of y is %d\n", y);
+        printf("The address of y is %p\n\n", &y);
+        x--;
+    }
+}
+\end{lstlisting}
+
+\textbf{Compile and run:}
 \begin{lstlisting}[style=bashstyle]
-gcc -no-pie -o static1_nopie static1.c
-./static1_nopie
+gcc -o static2 static2.c
+./static2
 \end{lstlisting}
 
 \textbf{Output (run 3 times):}
 \begin{lstlisting}[style=outstyle]
 ===== RUN 1 =====
 The value of y is 6
+The address of y is 0x7ffc3ea38200
+
+The value of y is 6
+The address of y is 0x7ffc3ea38200
+
+The value of y is 6
+The address of y is 0x7ffc3ea38200
+
+===== RUN 2 =====
+The value of y is 6
+The address of y is 0x7ffc2637bf30
+
+The value of y is 6
+The address of y is 0x7ffc2637bf30
+
+The value of y is 6
+The address of y is 0x7ffc2637bf30
+
+===== RUN 3 =====
+The value of y is 6
+The address of y is 0x7ffd8fb5f120
+
+The value of y is 6
+The address of y is 0x7ffd8fb5f120
+
+The value of y is 6
+The address of y is 0x7ffd8fb5f120
+\end{lstlisting}
+
+\subsection{Step 3: Explanation and Discussion of Difference}
+
+\subsubsection*{Why do the results show up that way in Step 2?}
+Without the \texttt{static} keyword, $y$ becomes an \textbf{automatic local variable} (equivalent to \texttt{auto int y = 5;}). 
+\begin{itemize}
+    \item \textbf{Value is always 6:} An automatic variable has \textbf{block scope} and \textbf{automatic storage duration}. In each iteration of the \texttt{while} loop, $y$ is allocated anew on the \textbf{Stack Frame}, initialized to $5$, incremented to $6$, and deallocated when the block ends. Hence, the value does not accumulate and is printed as $6$ in every iteration.
+    \item \textbf{Stack Address:} The address of $y$ is in the range \texttt{0x7ffc...} / \texttt{0x7ffd...}, which corresponds to the user stack region near the top of the virtual address space, rather than the data segment.
+\end{itemize}
+
+\subsubsection*{Discussion: Differences Between Both Outputs}
+\begin{table}[h!]
+\centering
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Attribute} & \textbf{With \texttt{static} (\texttt{static1.c})} & \textbf{Without \texttt{static} (\texttt{static2.c})} \\ \midrule
+Storage Class & Static storage class & Automatic (\texttt{auto}) storage class \\
+Memory Segment & Data Segment (Static memory) & Runtime Stack Frame \\
+Lifetime & Entire duration of the program & Block scope (single loop iteration) \\
+Value across loop & Accumulates: $6 \to 7 \to 8$ & Re-initialized each iteration: $6, 6, 6$ \\
+Address space & Base data segment ($\sim$\texttt{0x55...} / \texttt{0x60...}) & Stack segment ($\sim$\texttt{0x7ffd...}) \\ \bottomrule
+\end{tabular}
+\caption{Comparison between static and automatic variable behaviors.}
+\end{table}
+
+\subsection{Step 4: Redo with \texttt{-no-pie}}
+
+We recompile both programs with the \texttt{-no-pie} flag to disable Position Independent Executable generation:
+
+\begin{lstlisting}[style=bashstyle]
+gcc -no-pie -o static1_nopie static1.c
+gcc -no-pie -o static2_nopie static2.c
+\end{lstlisting}
+
+\textbf{Output of \texttt{static1\_nopie} (with static, run 3 times):}
+\begin{lstlisting}[style=outstyle]
+===== RUN 1 =====
+The value of y is 6
 The address of y is 0x404018
+
 The value of y is 7
 The address of y is 0x404018
+
 The value of y is 8
 The address of y is 0x404018
 
-===== RUN 2 =====   (same) address = 0x404018
-===== RUN 3 =====   (same) address = 0x404018
+===== RUN 2 =====
+The value of y is 6
+The address of y is 0x404018
+
+The value of y is 7
+The address of y is 0x404018
+
+The value of y is 8
+The address of y is 0x404018
+
+===== RUN 3 =====
+The value of y is 6
+The address of y is 0x404018
+
+The value of y is 7
+The address of y is 0x404018
+
+The value of y is 8
+The address of y is 0x404018
 \end{lstlisting}
 
-\subsection*{Explanation Step 4 (is it different?)}
+\textbf{Output of \texttt{static2\_nopie} (without static, run 3 times):}
+\begin{lstlisting}[style=outstyle]
+===== RUN 1 =====
+The value of y is 6
+The address of y is 0x7ffc88df5e10
 
-\textbf{Yes, different} --- with \texttt{-no-pie} the address of $y$ becomes \texttt{0x404018}, constant in every run (no matter how many times it is executed). This is because \texttt{-no-pie} tells the compiler to produce a non-position-independent executable (PIE is disabled), so the program is not affected by ASLR for the code/static segment, placing static data at a fixed address. This is opposite to the PIE (default) case where the address changes every run.
+The value of y is 6
+The address of y is 0x7ffc88df5e10
+
+The value of y is 6
+The address of y is 0x7ffc88df5e10
+
+===== RUN 2 =====
+The value of y is 6
+The address of y is 0x7ffcfb3f5d50
+
+The value of y is 6
+The address of y is 0x7ffcfb3f5d50
+
+The value of y is 6
+The address of y is 0x7ffcfb3f5d50
+
+===== RUN 3 =====
+The value of y is 6
+The address of y is 0x7ffc5842b000
+
+The value of y is 6
+The address of y is 0x7ffc5842b000
+
+The value of y is 6
+The address of y is 0x7ffc5842b000
+\end{lstlisting}
+
+\subsubsection*{Explanation for Step 4: Are they different? Why or why not?}
+\begin{itemize}
+    \item \textbf{For \texttt{static1\_nopie} (Static Variable) --- YES, different from Step 1:} \\
+    When compiled with \texttt{-no-pie}, PIE is disabled. The binary code and data segments are assigned fixed absolute virtual addresses at compile/link time. Consequently, ASLR no longer randomizes the position of the data segment, and the address of $y$ remains \textbf{constant (\texttt{0x404018})} across every run.
+    \item \textbf{For \texttt{static2\_nopie} (Automatic Variable on Stack):} \\
+    The address of $y$ \textbf{still changes} across different runs (e.g., \texttt{0x7ffc...}, \texttt{0x7fff...}, \texttt{0x7ffc...}). This is because \texttt{-no-pie} only disables PIE for executable binary mappings (ELF text/data segments), but the OS kernel still applies stack randomization (ASLR) to the process Stack.
+\end{itemize}
 
 \newpage
 \section{Extern Storage Class}
 
-\subsection{Step 1: Program extern1.c (with extern in main)}
+\subsection{Step 1: Program with extern in main (\texttt{extern1.c})}
 
 \begin{lstlisting}[style=cstyle]
 #include <stdio.h>
@@ -190,59 +343,171 @@ gcc -o extern1 extern1.c
 ===== RUN 1 =====
  Print value of x: 20
  Adress of x (in main function): 0x582057aa2010
+
  Display value of x: 20
  Adress of x (in display function): 0x582057aa2010
+
 ===== RUN 2 =====
  Print value of x: 20
  Adress of x (in main function): 0x6451fd93b010
+
  Display value of x: 20
  Adress of x (in display function): 0x6451fd93b010
+
 ===== RUN 3 =====
  Print value of x: 20
  Adress of x (in main function): 0x557625310010
+
  Display value of x: 20
  Adress of x (in display function): 0x557625310010
 \end{lstlisting}
 
-\subsection*{Explanation Step 1}
+\subsubsection*{Explanation for Step 1}
+Both \texttt{main()} and \texttt{display()} print the value $x = 20$ and reference the exact same memory address within each run. This is because $x$ is a \textbf{global variable} allocated in the static data segment. The keyword \texttt{extern} specifies that the variable is defined with external linkage (or in outer/file scope). Since both functions refer to the same symbol $x$, they point to the identical address in the Data Segment. Furthermore, across different runs, the address changes due to PIE and ASLR.
 
-Both \texttt{main()} and \texttt{display()} print the value $x = 20$ and use the same address within a given run because $x$ is a \textbf{global variable} declared at global scope (outside any function). \verb|extern| is a declaration meaning ``this variable is defined elsewhere (in another scope)'', so both functions refer to the \textbf{same} variable $x$, which resides in the data segment.
+\subsection{Step 2: Program without extern in main (\texttt{extern2.c})}
 
-\subsection{Step 2: remove extern in main (Program extern2.c)}
+In this step, we delete the declaration \texttt{extern int x;} on line 15 inside \texttt{main()}:
 
 \begin{lstlisting}[style=cstyle]
+#include <stdio.h>
+#include <stdlib.h>
+
+int x = 20;
+
+void display()
+{
+    extern int x;
+    printf(" Display value of x: %d\n", x);
+    printf(" Adress of x (in display function): %p\n\n", &x);
+}
+
 void main()
 {
-    // no extern int x;
+    // Line 15: "extern int x;" removed
     printf(" Print value of x: %d\n", x);
     printf(" Adress of x (in main function): %p\n\n", &x);
     display();
 }
 \end{lstlisting}
 
-\textbf{Output:} identical to \texttt{extern1.c} (value 20, same address in both functions).
+\textbf{Compile and run:}
+\begin{lstlisting}[style=bashstyle]
+gcc -o extern2 extern2.c
+./extern2
+\end{lstlisting}
 
-\subsection*{Explanation Step 3}
+\subsection{Step 3: Output, Explanation and Discussion of Difference}
 
-After removing \verb|extern| the result is still identical, because $x$ is a global variable visible from every function automatically. Since main has no local variable named $x$, it uses the global $x$ itself. Adding \verb|extern| in the original code only highlights that we refer to a variable defined externally, but in this case it is redundant because the global is already visible --- hence no difference in the output.
+\textbf{Output of \texttt{extern2} (run 3 times):}
+\begin{lstlisting}[style=outstyle]
+===== RUN 1 =====
+ Print value of x: 20
+ Adress of x (in main function): 0x5b83048ee010
 
-\subsection{Step 4: compile with -no-pie}
+ Display value of x: 20
+ Adress of x (in display function): 0x5b83048ee010
+
+===== RUN 2 =====
+ Print value of x: 20
+ Adress of x (in main function): 0x623416954010
+
+ Display value of x: 20
+ Adress of x (in display function): 0x623416954010
+
+===== RUN 3 =====
+ Print value of x: 20
+ Adress of x (in main function): 0x63d1d3f0c010
+
+ Display value of x: 20
+ Adress of x (in display function): 0x63d1d3f0c010
+\end{lstlisting}
+
+\subsubsection*{Explanation: Why do the results show up that way?}
+In C, any variable defined outside of all functions has \textbf{file scope} and \textbf{static storage duration} by default, making it accessible from any function defined below it in the same translation unit without needing an explicit \texttt{extern} declaration.
+\begin{itemize}
+    \item When \texttt{extern int x;} was present in \texttt{main()}, it was simply an explicit declaration telling the compiler to look for $x$ in the global/external scope.
+    \item When \texttt{extern int x;} is deleted, since there is no local variable named $x$ inside \texttt{main()}, the compiler automatically resolves $x$ to the global definition \texttt{int x = 20;}.
+    \item Therefore, both \texttt{main()} and \texttt{display()} still refer to the exact same global variable $x$.
+\end{itemize}
+
+\subsubsection*{Discussion: Differences Between Both Outputs}
+The outputs of \texttt{extern1} and \texttt{extern2} are \textbf{functionally identical} in terms of value ($20$) and address sharing between \texttt{main()} and \texttt{display()}:
+\begin{itemize}
+    \item In \texttt{extern1.c}: The \texttt{extern} inside \texttt{main()} is redundant because $x$ is already defined globally earlier in the same file.
+    \item In \texttt{extern2.c}: Removing \texttt{extern} does not change the behavior, as global variables are inherently visible to all functions in the file.
+    \item \textbf{When is \texttt{extern} actually necessary?} \texttt{extern} is strictly required when a global variable is defined in \textit{another separate source file} (multi-file compilation), or when a function needs to reference a global variable that is defined \textit{later} in the same file below that function.
+\end{itemize}
+
+\subsection{Step 4: Redo with \texttt{-no-pie}}
+
+We recompile both programs with \texttt{-no-pie}:
 
 \begin{lstlisting}[style=bashstyle]
 gcc -no-pie -o extern1_nopie extern1.c
-./extern1_nopie
+gcc -no-pie -o extern2_nopie extern2.c
 \end{lstlisting}
 
-\textbf{Output:} every run the address of $x$ = \texttt{0x404018} (constant).
+\textbf{Output of \texttt{extern1\_nopie} (run 3 times):}
+\begin{lstlisting}[style=outstyle]
+===== RUN 1 =====
+ Print value of x: 20
+ Adress of x (in main function): 0x404018
 
-\subsection*{Explanation Step 4}
+ Display value of x: 20
+ Adress of x (in display function): 0x404018
 
-Same as Part 1 --- \texttt{-no-pie} disables ASLR for static/global data, so the global $x$ is placed at a fixed address in every run, unlike the PIE case where the address changes each run.
+===== RUN 2 =====
+ Print value of x: 20
+ Adress of x (in main function): 0x404018
+
+ Display value of x: 20
+ Adress of x (in display function): 0x404018
+
+===== RUN 3 =====
+ Print value of x: 20
+ Adress of x (in main function): 0x404018
+
+ Display value of x: 20
+ Adress of x (in display function): 0x404018
+\end{lstlisting}
+
+\textbf{Output of \texttt{extern2\_nopie} (run 3 times):}
+\begin{lstlisting}[style=outstyle]
+===== RUN 1 =====
+ Print value of x: 20
+ Adress of x (in main function): 0x404018
+
+ Display value of x: 20
+ Adress of x (in display function): 0x404018
+
+===== RUN 2 =====
+ Print value of x: 20
+ Adress of x (in main function): 0x404018
+
+ Display value of x: 20
+ Adress of x (in display function): 0x404018
+
+===== RUN 3 =====
+ Print value of x: 20
+ Adress of x (in main function): 0x404018
+
+ Display value of x: 20
+ Adress of x (in display function): 0x404018
+\end{lstlisting}
+
+\subsubsection*{Explanation for Step 4: Are they different? Why or why not?}
+\textbf{Yes, different from Step 1 and Step 3:}
+\begin{itemize}
+    \item When compiled with default flags (PIE enabled), ASLR assigns a random virtual address to the binary's Data Segment on every execution (e.g., \texttt{0x5820...}, \texttt{0x6451...}, \texttt{0x5576...}).
+    \item When compiled with \texttt{-no-pie}, the binary is linked to use fixed absolute virtual addresses. The Data Segment is mapped to a static address predetermined by the linker script (\texttt{0x404018}), completely neutralizing the ASLR randomization for global variables.
+    \item Both \texttt{extern1\_nopie} and \texttt{extern2\_nopie} yield the exact same fixed address \texttt{0x404018} across all runs.
+\end{itemize}
 
 \newpage
 \section{Memory Allocation (malloc/realloc)}
 
-\subsection{Step 1: Program mem1.c (without uncommenting part b)}
+\subsection{Step 1 \& 2: Program \texttt{mem1.c} and Output}
 
 \begin{lstlisting}[style=cstyle]
 #include <stdio.h>
@@ -273,7 +538,7 @@ void main()
     printf(">>%p\n", &c[0]);
     printf(">>%p\n", &c[9]);
 
-/*      b = (float*) malloc(10*sizeof(float));
+/*  b = (float*) malloc(10*sizeof(float));
     printf("\nAfter malloc Pointer b\n");
     printf(">>%p\n", b);
     printf(">>%p\n", &b[0]);
@@ -287,7 +552,7 @@ void main()
     printf(">>%p\n", &a[999]);
 
     free(a);
-//      free(b);
+//  free(b);
 }
 \end{lstlisting}
 
@@ -324,36 +589,93 @@ After realloc Pointer a
 >>0x5fad2e71f24c
 \end{lstlisting}
 
-\subsection*{Explanation Step 3 (meaning of each part)}
+\clearpage
+\subsection{Step 3: Explanation (Meanings of Pointer Address, EA, Heap, and Stack)}
 
-\begin{table}[h]
+\begin{table}[ht!]
 \centering
 \small
-\begin{tabular}{@{}p{4.3cm}p{3.6cm}p{8cm}@{}}
+\begin{tabular}{@{}p{3.5cm}p{3.2cm}p{8.5cm}@{}}
 \toprule
 \textbf{Part} & \textbf{Value} & \textbf{Meaning} \\
 \midrule
-Address of Pointer \verb|&a| & \verb|0x7ffd90c86520| & address of pointer $a$ itself, on the \textbf{stack} (prefix \texttt{0x7ffd...}); 8 bytes apart from \verb|&b| (64-bit pointer) \\
-Address of Pointer \verb|&b| & \verb|0x7ffd90c86528| & address of pointer $b$ on the stack, next to $a$ \\
-Effective Address \verb|a| & \verb|(nil)| & what pointer $a$ points to -- NULL because not yet allocated \\
-Effective Address \verb|b| & \verb|(nil)| & pointer $b$ points nowhere $\to$ NULL \\
-After malloc \verb|a| & \verb|0x5fad2e71e2b0| & pointer $a$ now points to the \textbf{heap} (lower prefix than stack) \\
-\verb|&a[0]| & \verb|0x5fad2e71e2b0| & $= a$ (first element of the block) \\
-\verb|&a[9]| & \verb|0x5fad2e71e2d4| & offset from \verb|&a[0]| = $9 \times 4$ = 36 bytes (\texttt{int} = 4 bytes) \\
-Array $c$ \verb|c| & \verb|0x7ffd90c86530| & array $c$ is on the \textbf{stack} (prefix \texttt{0x7ffd...}) because it is a local array \\
-\verb|&c[9]| & \verb|0x7ffd90c86554| & offset $9 \times 4$ = 36 bytes \\
-After realloc \verb|a| & \verb|0x5fad2e71e2b0| & \textbf{unchanged} from before -- realloc grown in place \\
-\verb|&a[999]| & \verb|0x5fad2e71f24c| & offset from $a$ = $999 \times 4$ = 3996 bytes \\
+Address of Pointer \verb|&a| & \verb|0x7ffd90c86520| & Address of pointer variable $a$ itself, located on the \textbf{Stack} (prefix \texttt{0x7ffd...}); separated by 8 bytes from \verb|&b| (64-bit pointer). \\
+Address of Pointer \verb|&b| & \verb|0x7ffd90c86528| & Address of pointer variable $b$ on the Stack, placed adjacent to $a$. \\
+Effective Address \verb|a| & \verb|(nil)| & The address pointer $a$ holds (points to) -- \texttt{NULL} because it is uninitialized before dynamic allocation. \\
+Effective Address \verb|b| & \verb|(nil)| & Pointer $b$ currently points nowhere $\to$ \texttt{NULL}. \\
+After malloc \verb|a| & \verb|0x5fad2e71e2b0| & Pointer $a$ now points to dynamically allocated memory on the \textbf{Heap}. \\
+\verb|&a[0]| & \verb|0x5fad2e71e2b0| & $= a$ (Base address of the allocated 10-integer buffer). \\
+\verb|&a[9]| & \verb|0x5fad2e71e2d4| & Offset from \verb|&a[0]| = $9 \times 4$ = 36 bytes (\texttt{sizeof(int)} = 4 bytes). \\
+Array $c$ (\verb|c|) & \verb|0x7ffd90c86530| & Array $c$ is allocated directly on the \textbf{Stack} (prefix \texttt{0x7ffd...}) because it is a fixed local array. \\
+\verb|&c[9]| & \verb|0x7ffd90c86554| & Offset = $9 \times 4$ = 36 bytes from base \texttt{\&c[0]}. \\
+After realloc \verb|a| & \verb|0x5fad2e71e2b0| & \textbf{Unchanged} from before -- \texttt{realloc} expanded the buffer \textbf{in-place} on the heap. \\
+\verb|&a[999]| & \verb|0x5fad2e71f24c| & Offset from base $a$ = $999 \times 4$ = 3996 bytes. \\
 \bottomrule
 \end{tabular}
+\caption{Interpretation of each memory section in Step 1.}
 \end{table}
 
-\textbf{Summary:} local pointers are on the stack, but the memory allocated by malloc is on the heap, and a local array is entirely on the stack. The initial value before malloc is NULL.
+\textbf{Key Takeaways for Step 3:}
+\begin{itemize}
+    \item Local pointer variables (\texttt{\&a}, \texttt{\&b}) and local arrays (\texttt{c}) reside on the \textbf{Runtime Stack}.
+    \item Dynamic buffers returned by \texttt{malloc()} and \texttt{realloc()} reside on the \textbf{Heap}.
+    \item The effective address of an unallocated pointer is \texttt{(nil)} (\texttt{NULL}).
+\end{itemize}
 
-\subsection{Step 4: uncomment 2 places (Program mem2.c)}
+\clearpage
+\subsection{Step 4 \& 5: Program \texttt{mem2.c} (Uncommented) and Output}
 
-Uncomment \verb|b = (float*) malloc(...)| and \verb|free(b)|:
+In Step 4, we modify the code by uncommenting the two places involving pointer $b$ (the \texttt{malloc} call and \texttt{free(b)}):
 
+\begin{lstlisting}[style=cstyle]
+#include <stdio.h>
+#include <stdlib.h>
+
+void main()
+{
+    int *a;
+    float *b;
+    int c[10];
+
+    printf("\nAddress of Pointer\n");
+    printf(">>%p\n", &a);
+    printf(">>%p\n", &b);
+
+    printf("\nEffective Address\n");
+    printf(">>%p\n", a);
+    printf(">>%p\n", b);
+
+    a = (int *) malloc(10*sizeof(int));
+    printf("\nAfter malloc Pointer a\n");
+    printf(">>%p\n", a);
+    printf(">>%p\n", &a[0]);
+    printf(">>%p\n", &a[9]);
+
+    printf("\nArray c\n");
+    printf(">>%p\n", c);
+    printf(">>%p\n", &c[0]);
+    printf(">>%p\n", &c[9]);
+
+    // 1st uncommented section:
+    b = (float*) malloc(10*sizeof(float));
+    printf("\nAfter malloc Pointer b\n");
+    printf(">>%p\n", b);
+    printf(">>%p\n", &b[0]);
+    printf(">>%p\n", &b[9]);
+
+    a = (int *) realloc(a, 1000*sizeof(int));
+    printf("\nAfter realloc Pointer a\n");
+    printf(">>%p\n", a);
+    printf(">>%p\n", &a[0]);
+    printf(">>%p\n", &a[9]);
+    printf(">>%p\n", &a[999]);
+
+    free(a);
+    free(b);    // 2nd uncommented section
+}
+\end{lstlisting}
+
+\textbf{Compile and run:}
 \begin{lstlisting}[style=bashstyle]
 gcc -o mem2 mem2.c
 ./mem2
@@ -391,23 +713,30 @@ After realloc Pointer a
 >>0x604b7e40c2ac
 \end{lstlisting}
 
-\subsection*{Explanation Step 6}
+\subsection{Step 6: Analysis and Discussion (In-Place vs Relocated Realloc)}
 
+\subsubsection*{Why do the results show up that way?}
 \begin{itemize}
-    \item \textbf{Part b:} after malloc $b = \verb|0x604b...2e0|$, \verb|&b[0]| $= \verb|0x604b...2e0|$, \verb|&b[9]| $= \verb|0x604b...304|$ --- block $b$ is on the heap right after block $a$, where \verb|&b[9]| $= b + 9\times4$ (float is 4 bytes).
-    \item \textbf{Key difference in the address of $a$ after realloc:}
-        \begin{itemize}
-            \item In \texttt{mem1} (no allocation of $b$): $a$ after realloc \textbf{stays at the same place} \verb|0x...2e2b0|
-            \item In \texttt{mem2} (with $b$ allocated): $a$ after realloc \textbf{changes} to \verb|0x...2b310|
-        \end{itemize}
-    \item \textbf{Reason:} realloc needs to grow block $a$ from 40 bytes to 4000 bytes (1000 ints)
-        \begin{itemize}
-            \item In \texttt{mem1}: the free space right after block $a$ is large enough $\to$ realloc grows in place $\to$ address does not change
-            \item In \texttt{mem2}: block $b$ was allocated right after $a$, so the space adjacent to $a$ is not enough to grow $\to$ realloc must allocate a new larger block (new address \verb|0x...2b310|), copy the data from the old block, and free the old block $\to$ the address changes
-        \end{itemize}
+    \item \textbf{Allocation of block $b$:} After \texttt{malloc}, pointer $b$ receives the address \texttt{0x604b...2e0}. Notice that block $a$ ends around \texttt{0x604b...2d8} ($10 \times 4 = 40$ bytes plus heap chunk header overhead), which means block $b$ is placed immediately adjacent to block $a$ on the heap.
+    \item \textbf{Array $b$ offsets:} \verb|&b[0]| $= b$, and \verb|&b[9]| is located at offset $9 \times 4 = 36$ bytes (\texttt{sizeof(float)} = 4 bytes).
 \end{itemize}
 
-\textbf{Result of Step 6:} Yes, different --- especially the address of array $a$ changes because allocating $b$ blocks the in-place growth of block $a$.
+\subsubsection*{Comparison: Is the result different from the previous run? Especially for the address of array $a$?}
+\textbf{Yes, fundamentally different!}
+\begin{itemize}
+    \item \textbf{In \texttt{mem1.c} (Without $b$):} 
+    The address of $a$ after \texttt{realloc} remained \textbf{identical} (\texttt{0x5fad2e71e2b0}). Because no other heap block was allocated immediately following $a$, the glibc heap allocator expanded block $a$ \textbf{in-place} from 40 bytes to 4000 bytes without changing its starting virtual address.
+    \item \textbf{In \texttt{mem2.c} (With $b$ allocated):} 
+    The address of $a$ after \texttt{realloc} \textbf{changed} from \texttt{0x604b7e40b2b0} to \texttt{0x604b7e40b310}. 
+    \item \textbf{Why?} Block $b$ occupied the memory immediately following block $a$, blocking contiguous in-place expansion. To satisfy the request of 4000 bytes (1000 ints), \texttt{realloc} was forced to:
+    \begin{enumerate}
+        \item Find a new, sufficiently large contiguous chunk of memory on the heap (starting at \texttt{0x604b7e40b310}).
+        \item Copy the existing data from the old block $a$ to the newly allocated block.
+        \item Free the old block $a$ back to the heap allocator.
+    \end{enumerate}
+\end{itemize}
+
+\textbf{Conclusion for Step 6:} The presence of intervening dynamic allocations on the heap dictates whether \texttt{realloc()} can expand in-place or must relocate the buffer to a new address.
 
 \newpage
 \section*{Notes}
