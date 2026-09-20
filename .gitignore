@@ -1,6 +1,3 @@
-# Ignore all files by default
-*
-
 # Allow directory traversal
 !*/
 
