@@ -1,4 +1,5 @@
 # Allow directory traversal
+*
 !*/
 
 # Keep .pdf and .tex files
