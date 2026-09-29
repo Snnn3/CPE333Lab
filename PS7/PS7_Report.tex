@@ -1,10 +1,10 @@
 % CPE333 Operating Systems - PS7 Concurrency and Threads
 % Standalone report source. Compile with pdfLaTeX.
-\documentclass[a4paper,11pt]{article}
+\documentclass[a4paper,10pt]{article}
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage{lmodern}
-\usepackage[a4paper,margin=2.2cm]{geometry}
+\usepackage[a4paper,top=1.8cm,bottom=1.8cm,left=2.0cm,right=2.0cm]{geometry}
 \usepackage{graphicx}
 \usepackage{float}
 \usepackage{caption}
@@ -12,157 +12,166 @@
 \usepackage{hyperref}
 \usepackage{xcolor}
 \usepackage{listings}
+
 \hypersetup{colorlinks=true,linkcolor=blue!60!black,citecolor=blue!60!black,urlcolor=blue!60!black}
+
 \lstset{
-  basicstyle=\ttfamily\small,
-  backgroundcolor=\color{gray!8},
+  basicstyle=\ttfamily\scriptsize,
+  backgroundcolor=\color{gray!7},
   frame=single,
   breaklines=true,
   columns=fullflexible,
   keepspaces=true,
   showstringspaces=false,
+  aboveskip=4pt,
+  belowskip=4pt,
   captionpos=b
 }
-\title{CPE333 Operating Systems\\Problem Session 7: Concurrency and Thread}
-\author{Member 1: Name Thanaboon Tikaew 67070501021 \\
-Member 2: Chanon Lhumsa-ard 67070501059 \\
-Member 3: Theeraphat Jaingam 67070501063 \\
-Member 4: Siriwan Yindeepot 67070501075}
-\date{September 29, 2026}
+
+\captionsetup{skip=4pt}
 
 \begin{document}
-\maketitle
 
 \begin{center}
-\fbox{\parbox{0.92\linewidth}{\textbf{Environment:} Ubuntu 24.04 on WSL2, GCC 13.3.0, POSIX threads. The single source file \texttt{ps7.c} was compiled and run in WSL. Task 2 and Task 3 results below are five independent runs captured on September 29, 2026.}}
+  {\Large \textbf{CPE333 Operating Systems}}\\[3pt]
+  {\large \textbf{Problem Session 7: Concurrency and Thread}}\\[6pt]
+  \small
+  Member 1: Thanaboon Tikaew 67070501021 \quad
+  Member 2: Chanon Lhumsa-ard 67070501059 \\[2pt]
+  Member 3: Theeraphat Jaingam 67070501063 \quad
+  Member 4: Siriwan Yindeepot 67070501075 \\[4pt]
+  \textit{Department of Computer Engineering, KMUTT --- September 29, 2026}
 \end{center}
 
-\section{Program design}
-\subsection{Example and shared variable}
-The program models available seats in a reservation system. The shared variable \texttt{available\_seats} starts at 100,000. A reservation decreases the value by one, and a cancellation increases it by one. Each activity performs 100,000 operations, so without lost updates the expected final value is 100,000. All three tasks are implemented in the single source file \texttt{ps7.c}; a command-line argument selects which task to run.
+\vspace{-4pt}
+\begin{center}
+\fbox{\parbox{0.96\linewidth}{\footnotesize \textbf{Environment:} Ubuntu 24.04 on WSL2, GCC 13.3.0, POSIX threads. The program \texttt{ps7.c} was compiled and executed in WSL. Task 2 and Task 3 results report five independent runs captured on September 29, 2026.}}
+\end{center}
+\vspace{-4pt}
 
-From the \texttt{PS7} directory in Ubuntu, compile the program once and then run each task using its number. Each run starts a fresh process with the counter reset to 100,000.
-\begin{lstlisting}
+\section{Program Design}
+\subsection{Example Scenario and Shared Variable}
+The program models available seats in an event/airline reservation system. The shared variable \texttt{available\_seats} is initialized to 100,000. Reserving a seat decrements the count by one, while cancelling a reservation increments it by one. Each worker performs 100,000 operations; under sequential execution without lost updates, the expected final count is exactly 100,000.
+
+All three tasks are integrated into \texttt{ps7.c}. Invoking the program without arguments automatically executes all three tasks in sequence. Alternatively, passing an argument (1, 2, or 3) selects an individual task. Before each task executes, \texttt{available\_seats} is reinitialized to 100,000.
+
+\begin{lstlisting}[basicstyle=\ttfamily\scriptsize]
 cd ~/CPE333/PS7
 gcc -o ps7 ps7.c -pthread
-./ps7 1   # Task 1
-./ps7 2   # Task 2
-./ps7 3   # Task 3
+./ps7       # Runs all tasks sequentially (Task 1, 2, and 3)
+./ps7 1     # Task 1 only (one-thread baseline)
+./ps7 2     # Task 2 only (two threads, no deliberate yield)
+./ps7 3     # Task 3 only (two threads, with sched_yield)
 \end{lstlisting}
 
 \section{Code and Execution Results}
-The program remains in one source file, \texttt{ps7.c}. The task-specific code excerpts and their corresponding results are shown separately below.
 
-\subsection{Task 1: one-thread baseline}
-One worker performs the reservation loop followed by the cancellation loop. The main thread waits for the worker to finish.
-\begin{lstlisting}[basicstyle=\ttfamily\scriptsize,caption={Task 1 code excerpt}]
+\subsection{Task 1: One-Thread Baseline}
+A single thread executes 100,000 reservations followed sequentially by 100,000 cancellations. The main thread joins the worker upon completion.
+
+\begin{lstlisting}[caption={Task 1: Sequential baseline implementation in \texttt{ps7.c}}]
 static void *single_thread_baseline(void *unused)
 {
     (void)unused;
-
     for (long i = 0; i < OPERATIONS_PER_THREAD; ++i) {
         available_seats = available_seats - 1;
     }
     for (long i = 0; i < OPERATIONS_PER_THREAD; ++i) {
         available_seats = available_seats + 1;
     }
-
     return NULL;
 }
 \end{lstlisting}
-\textbf{Result (fresh run):}
+
 \begin{table}[H]
 \centering
-\caption{Task 1 output from \texttt{./ps7 1}.}
-\begin{tabular}{lr}
+\footnotesize
+\caption{Task 1 execution output (\texttt{./ps7 1}).}
+\begin{tabular}{lrr}
 \toprule
-Metric & Available seats \\
+Metric & Expected Count & Observed Count \\
 \midrule
-Initial count & 100,000 \\
-Expected final count & 100,000 \\
-Observed final count & 100,000 \\
+Initial available seats & 100,000 & 100,000 \\
+Final available seats   & 100,000 & 100,000 \\
 \bottomrule
 \end{tabular}
 \end{table}
-\textbf{Summary of values:} The final count matched the expected 100,000 seats.
+\noindent\textbf{Summary:} The final count exactly matches 100,000 seats. Without concurrent access, all operations complete deterministically with zero lost updates.
 
-\subsection{Task 2: concurrent updates without deliberate yielding}
-The shared worker routine loads, updates, and stores the counter. Task 2 passes a zero context-switch flag, so the worker does not call \texttt{sched\_yield()}.
-\begin{lstlisting}[basicstyle=\ttfamily\scriptsize,caption={Task 2 code excerpt}]
+\clearpage
+
+\subsection{Task 2: Concurrent Updates without Deliberate Yielding}
+Two threads run concurrently: Worker 0 reserves seats (change = -1) while Worker 1 cancels reservations (change = +1). Each update decomposes into load, calculate, and store. In Task 2, \texttt{force\_context\_switch} is 0, so no explicit yield is performed.
+
+\begin{lstlisting}[caption={Task 2: Worker routine decomposed into load, calculate, and store}]
 static void *update_seats(void *arg)
 {
     const worker_args_t *worker = (const worker_args_t *)arg;
-
     for (long i = 0; i < OPERATIONS_PER_THREAD; ++i) {
-        long local_seats = available_seats;
+        long local_seats = available_seats;   /* 1. Load memory to register */
+        local_seats += worker->change;        /* 2. Calculate */
         if (worker->force_context_switch) {
-            sched_yield();
+            sched_yield();                    /* Skipped in Task 2 */
         }
-        local_seats += worker->change;
-        available_seats = local_seats;
+        available_seats = local_seats;        /* 3. Save back to shared memory */
     }
-
     return NULL;
 }
-
-/* Task 2 selection in main(): */
-case 2:
-    return run_race_task(0, 2);
 \end{lstlisting}
-\textbf{Result} (final available seats from five independent runs):
+
 \begin{table}[H]
 \centering
-\caption{Task 2 final available seats in five runs.}
-\begin{tabular}{cr}
+\footnotesize
+\caption{Task 2 observed final seats across five independent runs (\texttt{./ps7 2}).}
+\begin{tabular}{lrrrrr}
 \toprule
-Run & Final available seats \\
+Run & 1 & 2 & 3 & 4 & 5 \\
 \midrule
-1 & 54,358 \\
-2 & 116,800 \\
-3 & 0 \\
-4 & 75,290 \\
-5 & 199,968 \\
+Final available seats & 54,358 & 116,800 & 0 & 75,290 & 199,968 \\
 \bottomrule
 \end{tabular}
 \end{table}
-\textbf{Summary of values:} The observed final count ranged from 0 to 199,968.
+\noindent\textbf{Summary:} The observed count deviates non-deterministically from the expected 100,000, spanning from 0 to 199,968 due to natural CPU time-slicing and multicore memory interleaving.
+
+\subsection{Task 3: Concurrent Updates with \texttt{sched\_yield()}}
+Task 3 reuses \texttt{update\_seats()}, but sets \texttt{force\_context\_switch = 1}. This calls \texttt{sched\_yield()} directly between calculation and memory storage, deliberately maximizing the preemption window while holding stale register values.
+
+\begin{lstlisting}[caption={Task 3: Worker configuration with voluntary yield enabled}]
+/* Worker parameters dispatched by run_race_task(1, 3): */
+worker_args_t workers[2] = {
+    {-1, 1}, /* Worker 0: change = -1, force_context_switch = 1 */
+    {+1, 1}, /* Worker 1: change = +1, force_context_switch = 1 */
+};
+\end{lstlisting}
+
+\begin{table}[H]
+\centering
+\footnotesize
+\caption{Task 3 observed final seats across five independent runs (\texttt{./ps7 3}).}
+\begin{tabular}{lrrrrr}
+\toprule
+Run & 1 & 2 & 3 & 4 & 5 \\
+\midrule
+Final available seats & 52,845 & 79,635 & 110,786 & 0 & 199,928 \\
+\bottomrule
+\end{tabular}
+\end{table}
+\noindent\textbf{Summary:} The outcomes remain wildly non-deterministic across runs (ranging from 0 to 199,928), confirming the race condition under forced context switching.
 
 \clearpage
-\subsection{Task 3: concurrent updates with \texttt{sched\_yield()}}
-Task 3 reuses the worker routine shown for Task 2, but selects the context-switch flag as one. This enables the \texttt{sched\_yield()} call between the load and store.
-\begin{lstlisting}[basicstyle=\ttfamily\scriptsize,caption={Task 3 code excerpt}]
-/* Worker flags created by run_race_task(1, 3): */
-worker_args_t workers[2] = {
-    {-1, 1},
-    {+1, 1},
-};
-
-/* Task 3 selection in main(): */
-case 3:
-    return run_race_task(1, 3);
-\end{lstlisting}
-\textbf{Result} (final available seats from five independent runs):
-\begin{table}[H]
-\centering
-\caption{Task 3 final available seats in five runs with \texttt{sched\_yield()}.}
-\begin{tabular}{cr}
-\toprule
-Run & Final available seats \\
-\midrule
-1 & 52,845 \\
-2 & 79,635 \\
-3 & 110,786 \\
-4 & 0 \\
-5 & 199,928 \\
-\bottomrule
-\end{tabular}
-\end{table}
-\textbf{Summary of values:} The observed final count ranged from 0 to 199,928.
 
 \section{Discussion}
-Task 1 gives the expected result because one worker updates the shared variable sequentially. In Tasks 2 and 3, each update is split into a load, a calculation, and a store. For example, if the counter is 100 and both workers read it, the reservation worker calculates 99 while the cancellation worker calculates 101. If the cancellation worker stores last, its value overwrites the reservation update and the final count is 101 instead of 100. Reversing the stores can leave 99. This lost update is the race condition.
 
-Task 2 varies even without an explicit yield because the workers can run concurrently and their operations can interleave naturally. In these five runs, the final values ranged from 0 to 199,968. Task 3 places \texttt{sched\_yield()} between the load and store, giving another runnable worker an opportunity to run. The five observed values ranged from 0 to 199,928. These results show scheduling-dependent behavior; they do not establish a guaranteed direction or final value. \texttt{sched\_yield()} requests a scheduling opportunity but does not guarantee a context switch.
+\paragraph{Mechanism of the Race Condition (Lost Updates):}
+Task 1 executes sequentially, ensuring deterministic results (100,000). In Tasks 2 and 3, seat updates are non-atomic and decompose into three steps: (1)~\textbf{Load} shared memory into a register, (2)~\textbf{Calculate} the change ($\pm 1$), and (3)~\textbf{Store} the modified value back to shared memory. Without synchronization, concurrent threads read the same initial value and compute independently; the thread that writes last overwrites the other thread's update, causing a \textbf{lost update} and non-deterministic final counts.
 
-\textbf{Technical note:} The shared variable is declared \texttt{volatile} so the demonstration keeps explicit loads and stores. \texttt{volatile} does not make an update atomic or synchronize the workers. Unsynchronized conflicting accesses are a C data race, so the language does not guarantee a particular result. A real reservation system should protect the shared counter with a mutex or an appropriate atomic operation.
+\paragraph{Task 2 vs.\ Task 3 (Natural Interleaving vs.\ \texttt{sched\_yield()}):}
+Task 2 varies even without explicit yields because the OS scheduler (Linux CFS under WSL2) enforces preemptive time-slicing via hardware timer interrupts, while multicore execution concurrently interleaves memory writes. In Task 3, calling \texttt{sched\_yield()} between calculation and storage voluntarily relinquishes the CPU, deliberately stretching the critical window where stale data is held in registers before being committed to memory.
+
+\paragraph{Explanation of Extreme Results (0 and $\approx$200,000):}
+The extreme boundary counts (e.g., 0 and near 200,000) stem from thread scheduling latency. If Worker 1 (+1) reads 100,000 on its first iteration and is immediately preempted, Worker 0 (-1) may execute all 100,000 iterations uninterrupted, driving the count to 0. When Worker 1 resumes, its pending write stores 100,001—obliterating all 100,000 prior decrements in a single memory store. Worker 1 then completes its remaining 99,999 iterations uncontested, terminating near 200,000 (and symmetrically terminating at 0 in reverse).
+
+\paragraph{Role of \texttt{volatile} and Proper Synchronization:}
+The shared variable is declared \texttt{volatile} solely to prevent compiler optimization from caching accesses in CPU registers, guaranteeing explicit memory reads and writes. Crucially, \texttt{volatile} provides no atomicity or mutual exclusion. Real-world reservation systems must eliminate data races using mutual exclusion locks (\texttt{pthread\_mutex\_t}) or hardware atomic operations (\texttt{stdatomic.h}).
+
 \end{document}

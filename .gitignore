@@ -5,6 +5,7 @@
 # Keep .pdf and .tex files
 !*.pdf
 !*.tex
+!*.c
 
 # Keep .gitignore itself
 !.gitignore
