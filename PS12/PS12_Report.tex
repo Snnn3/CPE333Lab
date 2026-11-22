@@ -1,0 +1,414 @@
+% CPE333 Operating Systems - Lab 12: File System and Implementation
+% Standalone report source; compile with pdfLaTeX or XeLaTeX.
+\documentclass[a4paper,11pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=2.1cm]{geometry}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+
+\definecolor{codebg}{rgb}{0.96,0.96,0.96}
+\definecolor{codeframe}{rgb}{0.78,0.78,0.78}
+\lstset{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{codebg},
+  frame=single,
+  rulecolor=\color{codeframe},
+  breaklines=true,
+  columns=fullflexible,
+  keepspaces=true,
+  showstringspaces=false,
+  aboveskip=5pt,
+  belowskip=5pt
+}
+\setlist[itemize]{itemsep=2pt,topsep=3pt}
+\setlist[enumerate]{itemsep=2pt,topsep=3pt}
+
+\title{\textbf{Lab 12 Report}\\[3pt]
+       \large File System and Implementation}
+\author{
+Thanaboon Tikaew \quad 67070501021\\
+Chanon Lhumsa-ard \quad 67070501059\\
+Siriwan Yindeepot \quad 67070501075
+}
+\date{[Submission date]}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+\section{Introduction}
+This lab examines three file-system topics: hard and symbolic links, named pipes
+(FIFOs), and the system calls used when a process reads and writes a file. The
+experiments use Linux commands in WSL and Windows commands in Command Prompt
+where required.
+
+\section{Environment}
+\begin{tabular}{>{\bfseries}p{0.28\linewidth}p{0.66\linewidth}}
+Linux environment & WSL; distribution and version: [record with \texttt{lsb\_release -a}] \\
+Linux working directory & \texttt{\textasciitilde/CPE333/PS12} \\
+Windows environment & Windows version: [record] \\
+Windows shell & Command Prompt (\texttt{cmd.exe}) for \texttt{mklink} \\
+\end{tabular}
+
+\noindent\textbf{Note:} The link and FIFO experiments should use a separate
+test directory. The Windows cross-drive test uses the small text file created
+in the Windows test directory as its target.
+
+\section{Hard and Symbolic Links}
+
+\subsection{Create and inspect links}
+In Linux, a hard link is another directory entry for the same file data, while
+a symbolic link stores a path to its target. The inode numbers shown by
+\texttt{ls -li} help distinguish the two.
+
+\begin{lstlisting}
+# Linux (WSL)
+mkdir -p ~/CPE333/PS12/link-lab
+cd ~/CPE333/PS12/link-lab
+printf 'original content\n' > source.txt
+ln source.txt hard.txt
+ln -s source.txt soft.txt
+ls -li source.txt hard.txt soft.txt
+\end{lstlisting}
+
+On Windows, run the following in Command Prompt in a test directory:
+\begin{lstlisting}
+cd /d "%USERPROFILE%"
+if not exist PS12-link-lab mkdir PS12-link-lab
+cd PS12-link-lab
+echo original content>source.txt
+mklink /H hard.txt source.txt
+mklink soft.txt source.txt
+dir
+\end{lstlisting}
+
+\noindent Creating Windows symbolic links may require Developer Mode or an
+elevated Command Prompt, depending on system policy.
+
+\subsection{Delete the source}
+After recording the directory listing, remove only the test source file and
+read both links:
+\begin{lstlisting}
+# Linux (WSL)
+rm source.txt
+cat hard.txt
+cat soft.txt
+\end{lstlisting}
+\begin{lstlisting}
+:: Windows Command Prompt
+del source.txt
+type hard.txt
+type soft.txt
+\end{lstlisting}
+
+\begin{itemize}
+  \item Expected behavior: the hard link still refers to the file data because
+  it is another directory entry for that file. The symbolic link refers to the
+  old pathname, so it becomes dangling after the target is removed.
+\end{itemize}
+
+\noindent\textbf{Observed output from WSL:}
+\begin{lstlisting}
+1645 -rw-r--r-- 2 sn sn  6 Nov 21 18:09 hard.txt
+12454 lrwxrwxrwx 1 sn sn 10 Nov 21 18:09 soft.txt -> source.txt
+1645 -rw-r--r-- 2 sn sn  6 Nov 21 18:09 source.txt
+
+$ rm source.txt
+$ cat hard.txt
+hello
+$ cat soft.txt
+cat: soft.txt: No such file or directory
+\end{lstlisting}
+
+The matching inode number \texttt{1645} and link count of 2 show that
+\texttt{source.txt} and \texttt{hard.txt} were two names for the same file
+data. Removing \texttt{source.txt} left \texttt{hard.txt} readable. The
+symbolic link stored the relative pathname \texttt{source.txt}; after that
+pathname was removed, \texttt{soft.txt} could no longer resolve its target.
+
+\noindent\textbf{Observed Windows result:}
+\begin{lstlisting}
+mklink /H hard.txt source.txt
+Hardlink created for hard.txt <<===>> source.txt
+mklink soft.txt source.txt
+You do not have sufficient privilege to perform this operation.
+
+:: Repeated in an elevated Command Prompt
+mklink soft.txt source.txt
+symbolic link created for soft.txt <<===>> source.txt
+dir
+<SYMLINK> soft.txt [source.txt]
+del source.txt
+type hard.txt
+hello
+type soft.txt
+The system cannot find the file specified.
+\end{lstlisting}
+
+The Windows hard link was created successfully and remained readable after
+\texttt{source.txt} was deleted. The first symbolic-link attempt was denied
+for insufficient privilege. Repeating it in an elevated Command Prompt
+created \texttt{soft.txt}, which \texttt{dir} identified as a symbolic link to
+\texttt{source.txt}. After deleting the target, \texttt{type soft.txt} could
+not open it, confirming the dangling-link behavior.
+
+\subsection{A two-level symbolic-link chain}
+Recreate the source in the test directory, then create a link to the source
+and a second link to the first link:
+\begin{lstlisting}
+# Linux (WSL)
+printf 'chain content\n' > source.txt
+ln -sfn source.txt level1
+ln -sfn level1 level2
+cat level2
+rm source.txt
+cat level2
+\end{lstlisting}
+\begin{lstlisting}
+:: Windows Command Prompt
+echo chain content>source.txt
+mklink level1 source.txt
+mklink level2 level1
+type level2
+del source.txt
+type level2
+\end{lstlisting}
+
+Then recreate the source and links, remove only \texttt{level1}, and read
+\texttt{level2}. The second link depends on resolving the first link, so
+removing the first link can make the second link unusable even while the
+original source file exists.
+
+\begin{lstlisting}
+# Linux (WSL), reset the chain for the second deletion test
+printf 'chain content\n' > source.txt
+ln -sfn source.txt level1
+ln -sfn level1 level2
+rm level1
+cat level2
+\end{lstlisting}
+\begin{lstlisting}
+:: Windows Command Prompt, reset the chain for the second deletion test
+del level2
+del level1
+echo chain content>source.txt
+mklink level1 source.txt
+mklink level2 level1
+del level1
+type level2
+\end{lstlisting}
+
+\noindent\textbf{Observed output after deleting the source:}
+\begin{lstlisting}
+$ cat level2
+chain content
+$ rm source.txt
+$ cat level2
+cat: level2: No such file or directory
+\end{lstlisting}
+
+Before deletion, resolving \texttt{level2} followed \texttt{level2 -> level1
+-> source.txt}. Removing \texttt{source.txt} broke the final link in the
+chain, so \texttt{cat level2} could no longer open the target.
+
+\noindent\textbf{Observed result after deleting \texttt{level1}:}
+\begin{lstlisting}
+$ cat level2
+chain content
+$ rm level1
+$ cat level2
+cat: level2: No such file or directory
+\end{lstlisting}
+
+At this point \texttt{source.txt} still existed, but \texttt{level2} could not
+resolve its immediate target \texttt{level1}. Removing an intermediate
+symbolic link therefore broke the chain.
+
+\subsection{Directory links and recursive listing}
+Create a directory link that points from a child directory back to its parent:
+\begin{lstlisting}
+# Linux (WSL)
+mkdir -p tree/child
+ln -s tree treeLink
+ln -s .. tree/child/parent
+ls -R tree
+\end{lstlisting}
+\begin{lstlisting}
+:: Windows Command Prompt
+mkdir tree\child
+mklink /D treeLink tree
+mklink /D tree\child\parent ..
+dir /s tree
+\end{lstlisting}
+
+Record whether each recursive listing follows the link, skips it, or reports
+an error. Stop the Windows listing with \texttt{Ctrl+C} if it continues
+repeating directories. On Linux, the default \texttt{ls -R} does not follow
+symbolic links to directories.
+
+\noindent\textbf{Observed WSL output:}
+\begin{lstlisting}
+$ ls -ld treeLink tree/child/parent
+lrwxrwxrwx 1 sn sn 2 Nov 21 18:22 tree/child/parent -> ..
+lrwxrwxrwx 1 sn sn 4 Nov 21 18:22 treeLink -> tree
+
+$ ls -R tree
+tree:
+child
+
+tree/child:
+parent
+\end{lstlisting}
+
+Both directory symbolic links were created. The \texttt{parent} link points
+back to \texttt{tree}, but the default \texttt{ls -R} listed the link without
+following it, so the recursive listing did not enter a loop.
+
+\noindent\textbf{Observed Windows output (excerpt):}
+\begin{lstlisting}
+mklink /D treeLink tree
+symbolic link created for treeLink <<===>> tree
+mklink /D tree\child\parent ..
+symbolic link created for tree\child\parent <<===>> ..
+
+Directory of ...\tree\child
+<SYMLINKD> parent [..]
+Directory of ...\tree\child\parent\child
+<SYMLINKD> parent [..]
+...
+Total Files Listed: 0
+384 Dir(s)
+\end{lstlisting}
+
+Unlike Linux \texttt{ls -R}, Windows \texttt{dir /s} followed the directory
+symbolic link and revisited the same \texttt{child} and \texttt{parent}
+pattern repeatedly. This run ended after listing 384 directories; the output
+did not state why recursion stopped.
+
+\subsection{Links across drives}
+If the computer has a D: drive, test a symbolic link on D: pointing to a
+source file on C:. Use an existing target file and a new link path:
+\begin{lstlisting}
+:: Windows Command Prompt; replace the target path if needed
+if not exist D:\PS12-link-lab mkdir D:\PS12-link-lab
+echo cross-drive test>"%USERPROFILE%\PS12-link-lab\source.txt"
+mklink D:\PS12-link-lab\cross-drive.txt "%USERPROFILE%\PS12-link-lab\source.txt"
+mklink /H D:\PS12-link-lab\hard-cross-drive.txt "%USERPROFILE%\PS12-link-lab\source.txt"
+\end{lstlisting}
+
+The symbolic-link test may be affected by Windows permissions and policy.
+Hard links cannot cross volumes, so the \texttt{/H} command is expected to
+fail when C: and D: are different volumes.
+
+\noindent\textbf{Observed result:} No D: drive was available on this computer,
+so the cross-drive link commands could not be run. If another separate
+volume (for example, E:) is available, its drive letter can replace D: in
+the commands above. A drive-letter alias that points back to C: is not a
+separate volume and would not test cross-volume hard-link behavior.
+
+\section{Linux Named Pipe}
+
+\subsection{Create and use a FIFO}
+Run this experiment in the WSL Linux file system. A FIFO is a named pipe: the
+name appears in the directory, but data passes between processes rather than
+being stored as ordinary file contents.
+
+\begin{lstlisting}
+# Prepare the FIFO (run once)
+mkdir -p ~/CPE333/PS12/pipe-lab
+cd ~/CPE333/PS12/pipe-lab
+mkfifo pipeFile
+ls -la pipeFile
+\end{lstlisting}
+
+Open two WSL terminals in the same directory. Start the writer first:
+\begin{lstlisting}
+# Terminal 1
+cat > pipeFile
+\end{lstlisting}
+
+Then start the reader:
+\begin{lstlisting}
+# Terminal 2
+cat pipeFile
+\end{lstlisting}
+
+Type \texttt{hello linux} in Terminal 1 and observe Terminal 2. Repeat with
+another line, then press \texttt{Ctrl+D} in Terminal 1 to close its input.
+The writer and reader wait for each other to open the FIFO; once both are
+connected, bytes written by one process become available to the other. Closing
+the writer produces end-of-file for the reader after buffered bytes are read.
+
+\noindent\textbf{Observed output:}
+\begin{lstlisting}
+$ ls -l pipeFile
+prw-r--r-- 1 sn sn 0 Nov 21 17:47 pipeFile
+
+Terminal 1: cat > pipeFile
+Typed: hello linux
+
+Terminal 2: cat pipeFile
+Displayed: hello linux
+\end{lstlisting}
+
+The leading \texttt{p} identifies \texttt{pipeFile} as a FIFO. Its reported
+size is zero because it is a communication channel rather than a regular file
+that stores the message. After \texttt{Ctrl+D} closed the writer's input,
+Terminal 1 returned to the shell prompt and the reader finished after receiving
+the data and end-of-file.
+
+\section{Reading and Writing Files}
+
+\subsection{Trace the system calls}
+The following command sequence was run in WSL from
+\texttt{\textasciitilde/CPE333/PS12}:
+\begin{lstlisting}
+echo hello > foo
+strace cat foo
+\end{lstlisting}
+
+The command created a six-byte file containing \texttt{hello} followed by a
+newline. The trace contained many setup calls; the four calls relevant to the
+question were:
+\begin{lstlisting}
+read(3, "hello\n", 131072) = 6
+write(1, "hello\n", 6) = 6
+read(3, "", 131072) = 0
+close(3) = 0
+\end{lstlisting}
+
+\subsection{Explanation}
+\begin{itemize}
+  \item \texttt{3} is the file descriptor assigned to \texttt{foo}. The trace
+  shows the earlier \texttt{openat(..., "foo", ...) = 3}.
+  \item \texttt{1} is the standard-output file descriptor. \texttt{cat} writes
+  the file contents to standard output.
+  \item \texttt{6} is the number of bytes actually read and written:
+  \texttt{hello} has five characters and the newline adds one byte.
+  \item \texttt{131072} is the maximum number of bytes requested by each
+  \texttt{read} call in this run. The file contained only six bytes, so the
+  first call returned \texttt{6}. The next call returned \texttt{0}, which
+  indicates end-of-file.
+\end{itemize}
+
+The assignment example shows a request size of \texttt{32768}; this run showed
+\texttt{131072}. The requested buffer size can differ between environments.
+The meaning of the system-call arguments and return values remains the same.
+The visible word \texttt{hello} may appear interleaved with a trace line because
+\texttt{strace} writes its trace to standard error while \texttt{cat} writes
+file contents to standard output.
+
+\section{Conclusion}
+The experiments demonstrate that hard and symbolic links refer to file data
+in different ways, a FIFO transfers data between processes without acting like
+a regular stored file, and \texttt{strace} exposes the low-level read and write
+operations used by a command such as \texttt{cat}.
+
+\end{document}
