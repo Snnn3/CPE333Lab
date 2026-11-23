@@ -36,7 +36,7 @@ Thanaboon Tikaew \quad 67070501021\\
 Chanon Lhumsa-ard \quad 67070501059\\
 Siriwan Yindeepot \quad 67070501075
 }
-\date{[Submission date]}
+\date{23 November 2026}
 
 \begin{document}
 \maketitle
@@ -51,9 +51,9 @@ where required.
 
 \section{Environment}
 \begin{tabular}{>{\bfseries}p{0.28\linewidth}p{0.66\linewidth}}
-Linux environment & WSL; distribution and version: [record with \texttt{lsb\_release -a}] \\
+Linux environment & WSL 2; Ubuntu 24.04.1 LTS (noble), from \texttt{lsb\_release -a} \\
 Linux working directory & \texttt{\textasciitilde/CPE333/PS12} \\
-Windows environment & Windows version: [record] \\
+Windows environment & Windows 11 Pro, version 10.0.26300 (build 26300) \\
 Windows shell & Command Prompt (\texttt{cmd.exe}) for \texttt{mklink} \\
 \end{tabular}
 
@@ -62,6 +62,11 @@ test directory. The Windows cross-drive test uses the small text file created
 in the Windows test directory as its target.
 
 \section{Hard and Symbolic Links}
+
+Together these links turn the directory hierarchy from a strict tree into a
+general graph directory structure: a hard link gives one file more than one
+parent (a DAG), while a symbolic link stores a pathname and can also form a
+cycle when it points back to an upper-level directory.
 
 \subsection{Create and inspect links}
 In Linux, a hard link is another directory entry for the same file data, while
@@ -72,7 +77,7 @@ a symbolic link stores a path to its target. The inode numbers shown by
 # Linux (WSL)
 mkdir -p ~/CPE333/PS12/link-lab
 cd ~/CPE333/PS12/link-lab
-printf 'original content\n' > source.txt
+printf 'hello\n' > source.txt
 ln source.txt hard.txt
 ln -s source.txt soft.txt
 ls -li source.txt hard.txt soft.txt
@@ -83,7 +88,7 @@ On Windows, run the following in Command Prompt in a test directory:
 cd /d "%USERPROFILE%"
 if not exist PS12-link-lab mkdir PS12-link-lab
 cd PS12-link-lab
-echo original content>source.txt
+echo hello>source.txt
 mklink /H hard.txt source.txt
 mklink soft.txt source.txt
 dir
@@ -116,9 +121,9 @@ type soft.txt
 
 \noindent\textbf{Observed output from WSL:}
 \begin{lstlisting}
-1645 -rw-r--r-- 2 sn sn  6 Nov 21 18:09 hard.txt
-12454 lrwxrwxrwx 1 sn sn 10 Nov 21 18:09 soft.txt -> source.txt
-1645 -rw-r--r-- 2 sn sn  6 Nov 21 18:09 source.txt
+1645 -rw-r--r-- 2 thnabun thnabun  6 Nov 21 18:09 hard.txt
+12454 lrwxrwxrwx 1 thnabun thnabun 10 Nov 21 18:09 soft.txt -> source.txt
+1645 -rw-r--r-- 2 thnabun thnabun  6 Nov 21 18:09 source.txt
 
 $ rm source.txt
 $ cat hard.txt
@@ -214,9 +219,25 @@ $ cat level2
 cat: level2: No such file or directory
 \end{lstlisting}
 
-Before deletion, resolving \texttt{level2} followed \texttt{level2 -> level1
--> source.txt}. Removing \texttt{source.txt} broke the final link in the
-chain, so \texttt{cat level2} could no longer open the target.
+Before deletion, resolving \texttt{level2} followed the chain
+\texttt{level2} $\to$ \texttt{level1} $\to$ \texttt{source.txt}. Removing
+\texttt{source.txt} broke the final link in the chain, so \texttt{cat level2}
+could no longer open the target.
+
+\noindent\textbf{Observed Windows result after deleting the source:}
+\begin{lstlisting}
+> type level2
+chain content
+
+> del source.txt
+
+> type level2
+The system cannot find the file specified.
+\end{lstlisting}
+
+Windows behaved in the same way. \texttt{level2} first resolved through
+\texttt{level1} to \texttt{source.txt}; after the final target was deleted,
+both symbolic links still existed but the chain could no longer be resolved.
 
 \noindent\textbf{Observed result after deleting \texttt{level1}:}
 \begin{lstlisting}
@@ -230,6 +251,20 @@ cat: level2: No such file or directory
 At this point \texttt{source.txt} still existed, but \texttt{level2} could not
 resolve its immediate target \texttt{level1}. Removing an intermediate
 symbolic link therefore broke the chain.
+
+\noindent\textbf{Observed Windows result after deleting \texttt{level1}:}
+\begin{lstlisting}
+> type level2
+chain content
+
+> del level1
+
+> type level2
+The system cannot find the file specified.
+\end{lstlisting}
+
+The Windows result matched Linux: \texttt{source.txt} was still present, but
+\texttt{level2} could not resolve its immediate target \texttt{level1}.
 
 \subsection{Directory links and recursive listing}
 Create a directory link that points from a child directory back to its parent:
@@ -256,8 +291,8 @@ symbolic links to directories.
 \noindent\textbf{Observed WSL output:}
 \begin{lstlisting}
 $ ls -ld treeLink tree/child/parent
-lrwxrwxrwx 1 sn sn 2 Nov 21 18:22 tree/child/parent -> ..
-lrwxrwxrwx 1 sn sn 4 Nov 21 18:22 treeLink -> tree
+lrwxrwxrwx 1 thnabun thnabun 2 Nov 21 18:22 tree/child/parent -> ..
+lrwxrwxrwx 1 thnabun thnabun 4 Nov 21 18:22 treeLink -> tree
 
 $ ls -R tree
 tree:
@@ -303,15 +338,35 @@ mklink D:\PS12-link-lab\cross-drive.txt "%USERPROFILE%\PS12-link-lab\source.txt"
 mklink /H D:\PS12-link-lab\hard-cross-drive.txt "%USERPROFILE%\PS12-link-lab\source.txt"
 \end{lstlisting}
 
-The symbolic-link test may be affected by Windows permissions and policy.
-Hard links cannot cross volumes, so the \texttt{/H} command is expected to
-fail when C: and D: are different volumes.
+The symbolic-link test may be affected by Windows permissions and policy, so
+the commands were run in an elevated Command Prompt. Hard links cannot cross
+volumes, so the \texttt{/H} command is expected to fail when C: and D: are
+different volumes.
 
-\noindent\textbf{Observed result:} No D: drive was available on this computer,
-so the cross-drive link commands could not be run. If another separate
-volume (for example, E:) is available, its drive letter can replace D: in
-the commands above. A drive-letter alias that points back to C: is not a
-separate volume and would not test cross-volume hard-link behavior.
+\noindent\textbf{Observed result (Windows, elevated Command Prompt):}
+\begin{lstlisting}
+mklink D:\PS12-link-lab\cross-drive.txt "%USERPROFILE%\PS12-link-lab\source.txt"
+symbolic link created for D:\PS12-link-lab\cross-drive.txt <<===>> C:\Users\win25\PS12-link-lab\source.txt
+
+mklink /H D:\PS12-link-lab\hard-cross-drive.txt "%USERPROFILE%\PS12-link-lab\source.txt"
+The system cannot move the file to a different disk drive.
+
+dir D:\PS12-link-lab
+ Volume in drive D is DATA
+ ...
+11/23/2026  11:54 AM    <SYMLINK>      cross-drive.txt [C:\Users\win25\PS12-link-lab\source.txt]
+
+type D:\PS12-link-lab\cross-drive.txt
+cross-drive test
+\end{lstlisting}
+
+This computer did have a separate D: volume (label \texttt{DATA}), so the
+cross-drive experiment was run there. The symbolic link was created
+successfully and \texttt{type} read the C: source file through the D: link,
+showing that a link which stores a pathname can point across volumes. The hard
+link failed with \texttt{The system cannot move the file to a different disk
+drive.} because a hard link is another directory entry for the same on-disk
+data and must therefore be on the same volume as the source file.
 
 \section{Linux Named Pipe}
 
@@ -348,21 +403,27 @@ the writer produces end-of-file for the reader after buffered bytes are read.
 
 \noindent\textbf{Observed output:}
 \begin{lstlisting}
-$ ls -l pipeFile
-prw-r--r-- 1 sn sn 0 Nov 21 17:47 pipeFile
+$ ls -la pipeFile
+prw-r--r-- 1 thnabun thnabun 0 Nov 23 11:54 pipeFile
 
 Terminal 1: cat > pipeFile
 Typed: hello linux
+Typed: second line
 
 Terminal 2: cat pipeFile
 Displayed: hello linux
+Displayed: second line
 \end{lstlisting}
 
-The leading \texttt{p} identifies \texttt{pipeFile} as a FIFO. Its reported
-size is zero because it is a communication channel rather than a regular file
-that stores the message. After \texttt{Ctrl+D} closed the writer's input,
-Terminal 1 returned to the shell prompt and the reader finished after receiving
-the data and end-of-file.
+The leading \texttt{p} identifies \texttt{pipeFile} as a FIFO (named pipe), a
+special file type used for communication between processes. Its reported size
+is zero because the messages are held in a kernel buffer while the pipe is
+open rather than stored as ordinary file contents on disk. The two
+\texttt{cat} processes blocked until both the writer and the reader had opened
+the FIFO; after that, each line written in Terminal 1 became available in
+Terminal 2 in order. This is a unidirectional, byte-stream channel. After
+\texttt{Ctrl+D} closed the writer's input, the reader received end-of-file and
+both processes returned to the shell prompt.
 
 \section{Reading and Writing Files}
 
