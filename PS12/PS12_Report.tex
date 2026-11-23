@@ -4,7 +4,7 @@
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
 \usepackage{lmodern}
-\usepackage[margin=2.1cm]{geometry}
+\usepackage[margin=2cm]{geometry}
 \usepackage{booktabs}
 \usepackage{array}
 \usepackage{xcolor}
@@ -24,8 +24,8 @@
   columns=fullflexible,
   keepspaces=true,
   showstringspaces=false,
-  aboveskip=5pt,
-  belowskip=5pt
+  aboveskip=4pt,
+  belowskip=4pt
 }
 \setlist[itemize]{itemsep=2pt,topsep=3pt}
 \setlist[enumerate]{itemsep=2pt,topsep=3pt}
@@ -271,7 +271,19 @@ The Windows result matched Linux: \texttt{source.txt} was still present, but
 \texttt{level2} could not resolve its immediate target \texttt{level1}.
 
 \subsection{Directory links and recursive listing}
-Create a directory link that points from a child directory back to its parent:
+First, attempting to create a hard link to a directory is prohibited by both operating systems:
+\begin{lstlisting}
+# Linux (WSL)
+$ ln tree hardDirLink
+ln: tree: hard link not allowed for directory
+
+# Windows Command Prompt
+> mklink /H hardDirLink tree
+Access is denied.
+\end{lstlisting}
+Linux and Windows disallow hard links to directories to prevent arbitrary cycles in the directory hierarchy at the filesystem level, which would compromise reference counting and cause infinite loops in filesystem maintenance utilities like \texttt{fsck}. As a result, directory linking is restricted to symbolic links (or directory junctions on Windows).
+
+Next, create a symbolic directory link that points from a child directory back to its parent:
 \begin{lstlisting}
 # Linux (WSL)
 mkdir -p tree/child
