@@ -10,6 +10,7 @@
 \usepackage{xcolor}
 \usepackage{listings}
 \usepackage{enumitem}
+\usepackage{needspace}
 \usepackage[hidelinks]{hyperref}
 
 \definecolor{codebg}{rgb}{0.96,0.96,0.96}
@@ -57,9 +58,11 @@ Windows environment & Windows 11 Pro, version 10.0.26300 (build 26300) \\
 Windows shell & Command Prompt (\texttt{cmd.exe}) for \texttt{mklink} \\
 \end{tabular}
 
-\noindent\textbf{Note:} The link and FIFO experiments should use a separate
-test directory. The Windows cross-drive test uses the small text file created
-in the Windows test directory as its target.
+\noindent\textbf{Note:} The experiments were performed by different group
+members on their own systems. Usernames and available drive letters in the
+captured output therefore vary. The cross-drive run was performed on a Windows
+system with a separate D: volume labeled \texttt{DATA}; some members' systems
+did not have a D: drive.
 
 \section{Hard and Symbolic Links}
 
@@ -252,6 +255,7 @@ At this point \texttt{source.txt} still existed, but \texttt{level2} could not
 resolve its immediate target \texttt{level1}. Removing an intermediate
 symbolic link therefore broke the chain.
 
+\Needspace{8\baselineskip}
 \noindent\textbf{Observed Windows result after deleting \texttt{level1}:}
 \begin{lstlisting}
 > type level2
@@ -322,10 +326,8 @@ Total Files Listed: 0
 384 Dir(s)
 \end{lstlisting}
 
-Unlike Linux \texttt{ls -R}, Windows \texttt{dir /s} followed the directory
-symbolic link and revisited the same \texttt{child} and \texttt{parent}
-pattern repeatedly. This run ended after listing 384 directories; the output
-did not state why recursion stopped.
+Windows \texttt{dir /s} followed the directory link into a parent-child cycle
+and listed 384 directories before stopping; it did not report why.
 
 \subsection{Links across drives}
 If the computer has a D: drive, test a symbolic link on D: pointing to a
@@ -360,20 +362,15 @@ type D:\PS12-link-lab\cross-drive.txt
 cross-drive test
 \end{lstlisting}
 
-This computer did have a separate D: volume (label \texttt{DATA}), so the
-cross-drive experiment was run there. The symbolic link was created
-successfully and \texttt{type} read the C: source file through the D: link,
-showing that a link which stores a pathname can point across volumes. The hard
-link failed with \texttt{The system cannot move the file to a different disk
-drive.} because a hard link is another directory entry for the same on-disk
-data and must therefore be on the same volume as the source file.
+On the member's Windows PC, D: was labeled \texttt{DATA}. The D: symbolic link
+read the C: source, while the hard-link attempt returned the different-drive
+error because hard links must share a volume.
 
 \section{Linux Named Pipe}
 
 \subsection{Create and use a FIFO}
-Run this experiment in the WSL Linux file system. A FIFO is a named pipe: the
-name appears in the directory, but data passes between processes rather than
-being stored as ordinary file contents.
+Run this in WSL: a FIFO has a directory entry but passes data between processes
+instead of storing it in a regular file.
 
 \begin{lstlisting}
 # Prepare the FIFO (run once)
@@ -383,24 +380,16 @@ mkfifo pipeFile
 ls -la pipeFile
 \end{lstlisting}
 
-Open two WSL terminals in the same directory. Start the writer first:
+Open two WSL terminals in this directory. Run the matching command in each,
+then type lines in Terminal 1 and press \texttt{Ctrl+D} to close the writer.
 \begin{lstlisting}
-# Terminal 1
+# Terminal 1 (writer)
 cat > pipeFile
-\end{lstlisting}
-
-Then start the reader:
-\begin{lstlisting}
-# Terminal 2
+# Terminal 2 (reader)
 cat pipeFile
 \end{lstlisting}
 
-Type \texttt{hello linux} in Terminal 1 and observe Terminal 2. Repeat with
-another line, then press \texttt{Ctrl+D} in Terminal 1 to close its input.
-The writer and reader wait for each other to open the FIFO; once both are
-connected, bytes written by one process become available to the other. Closing
-the writer produces end-of-file for the reader after buffered bytes are read.
-
+\Needspace{14\baselineskip}
 \noindent\textbf{Observed output:}
 \begin{lstlisting}
 $ ls -la pipeFile
@@ -415,15 +404,12 @@ Displayed: hello linux
 Displayed: second line
 \end{lstlisting}
 
-The leading \texttt{p} identifies \texttt{pipeFile} as a FIFO (named pipe), a
-special file type used for communication between processes. Its reported size
-is zero because the messages are held in a kernel buffer while the pipe is
-open rather than stored as ordinary file contents on disk. The two
-\texttt{cat} processes blocked until both the writer and the reader had opened
-the FIFO; after that, each line written in Terminal 1 became available in
-Terminal 2 in order. This is a unidirectional, byte-stream channel. After
-\texttt{Ctrl+D} closed the writer's input, the reader received end-of-file and
-both processes returned to the shell prompt.
+The leading \texttt{p} identifies \texttt{pipeFile} as a FIFO. Its size is zero
+because it does not store data as a regular file. Opening one end waits for the
+other; once both \texttt{cat} processes are connected, lines typed in Terminal 1
+are sent to Terminal 2 in order. The FIFO is a unidirectional byte stream.
+\texttt{Ctrl+D} closes the writer, and the reader exits after receiving
+end-of-file.
 
 \section{Reading and Writing Files}
 
@@ -434,6 +420,9 @@ The following command sequence was run in WSL from
 echo hello > foo
 strace cat foo
 \end{lstlisting}
+The trace is written to standard error while \texttt{cat} writes the file
+contents to standard output, so the two outputs may appear interleaved in a
+terminal.
 
 The command created a six-byte file containing \texttt{hello} followed by a
 newline. The trace contained many setup calls; the four calls relevant to the
@@ -453,23 +442,10 @@ close(3) = 0
   the file contents to standard output.
   \item \texttt{6} is the number of bytes actually read and written:
   \texttt{hello} has five characters and the newline adds one byte.
-  \item \texttt{131072} is the maximum number of bytes requested by each
-  \texttt{read} call in this run. The file contained only six bytes, so the
-  first call returned \texttt{6}. The next call returned \texttt{0}, which
-  indicates end-of-file.
+  \item The third argument to \texttt{read} is its requested byte count:
+  \texttt{32768} in the assignment example and \texttt{131072} in this run.
+  It is a maximum, not the amount actually read. Here \texttt{read} returned
+  \texttt{6} bytes, then \texttt{0} at end-of-file.
 \end{itemize}
-
-The assignment example shows a request size of \texttt{32768}; this run showed
-\texttt{131072}. The requested buffer size can differ between environments.
-The meaning of the system-call arguments and return values remains the same.
-The visible word \texttt{hello} may appear interleaved with a trace line because
-\texttt{strace} writes its trace to standard error while \texttt{cat} writes
-file contents to standard output.
-
-\section{Conclusion}
-The experiments demonstrate that hard and symbolic links refer to file data
-in different ways, a FIFO transfers data between processes without acting like
-a regular stored file, and \texttt{strace} exposes the low-level read and write
-operations used by a command such as \texttt{cat}.
 
 \end{document}
